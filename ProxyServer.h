@@ -38,19 +38,19 @@ private:
 	addrinfo* lisSockInfo;
 	SOCKET lis_socket;
 	WSAEVENT clientConnectionRequest;
-	addrinfo* webSockInfo;
-	SOCKET server_socket;
-	WSAEVENT bufToClientHasData;
-	WSAEVENT bufToServHasData;
-	WSAEVENT clientReadySend;
 	WSAEVENT serverReadySend;
+	addrinfo* servSockInfo;
+	SOCKET server_socket;
+	int errState;
 	WSADATA wsData;
 protected:
 	SOCKET client_socket;
-	int errState;
+	WSAEVENT bufToClientHasData;
+	WSAEVENT bufToServHasData;
+	WSAEVENT clientReadySend;
 };
 
-class WebSocketProxyServer: public ProxyServer {
+class WebSocketProxyServer : public ProxyServer {
 public:
 	WebSocketProxyServer(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort);
 	~WebSocketProxyServer();
@@ -58,6 +58,9 @@ public:
 	void serverHandler() override;
 private:
 	void connectToServer();
+	void CALLBACK WebSocketEvents (HINTERNET hInternet, DWORD_PTR dwContext, DWORD dwInternetStatus, LPVOID lpvStatusInformation, DWORD dwStatusInformationLength);
+	void sockCommunication();
+	void createSocketEvents();
 	void stopServer();
 private:
 	HINTERNET SessionHandle;
