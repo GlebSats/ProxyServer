@@ -6,7 +6,7 @@
 #define BUFFER_SIZE 1024
 
 ProxyServer::ProxyServer(const char* listeningPort, const char* serverIP, const char* serverPort) : lisSockInfo(nullptr),
-webSockInfo(nullptr), serviceStopEvent(nullptr), listeningPort(listeningPort),
+servSockInfo(nullptr), serviceStopEvent(nullptr), listeningPort(listeningPort),
 serverIP(serverIP), serverPort(serverPort), lis_socket(-1), client_socket(-1),
 server_socket(-1), errState(0), bufToClientHasData(WSA_INVALID_EVENT), bufToServHasData(WSA_INVALID_EVENT),
 clientReadySend(WSA_INVALID_EVENT), serverReadySend(WSA_INVALID_EVENT)
@@ -30,8 +30,8 @@ void ProxyServer::serverInitialization()
 void ProxyServer::serverHandler()
 {
 	acceptConnection();
-	createSockInfo(serverIP, serverPort, &webSockInfo);
-	createNewSocket(server_socket, webSockInfo);
+	createSockInfo(serverIP, serverPort, &servSockInfo);
+	createNewSocket(server_socket, servSockInfo);
 	connectToServer();
 	sockCommunication();
 }
@@ -84,7 +84,7 @@ void ProxyServer::listenState()
 
 void ProxyServer::connectToServer()
 {
-	errState = connect(server_socket, webSockInfo->ai_addr, webSockInfo->ai_addrlen);
+	errState = connect(server_socket, servSockInfo->ai_addr, servSockInfo->ai_addrlen);
 	if (errState != 0) {
 		throw ServException("Connection to Web Server failed: ", WSAGetLastError());
 	}
@@ -264,7 +264,7 @@ void ProxyServer::closeConnection()
 
 void ProxyServer::stopServer()
 {
-	freeaddrinfo(webSockInfo);
+	freeaddrinfo(servSockInfo);
 	freeaddrinfo(lisSockInfo);
 	if (server_socket != INVALID_SOCKET) {
 		closesocket(server_socket);
@@ -281,8 +281,8 @@ void ProxyServer::stopServer()
 }
 
 ProxyServer::ProxyServer(const char* listeningPort) : lisSockInfo(nullptr),
-webSockInfo(nullptr), serviceStopEvent(nullptr), listeningPort(listeningPort),
- lis_socket(-1), client_socket(-1),server_socket(-1),
+servSockInfo(nullptr), serviceStopEvent(nullptr), listeningPort(listeningPort),
+lis_socket(-1), client_socket(-1), server_socket(-1),
 errState(0), bufToClientHasData(WSA_INVALID_EVENT), bufToServHasData(WSA_INVALID_EVENT),
 clientReadySend(WSA_INVALID_EVENT), serverReadySend(WSA_INVALID_EVENT)
 {
@@ -325,7 +325,7 @@ void ProxyServer::acceptConnection()
 	}
 }
 
-WebSocketProxyServer::WebSocketProxyServer(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort): ProxyServer(listeningPort)
+WebSocketProxyServer::WebSocketProxyServer(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort) : ProxyServer(listeningPort)
 {
 	this->serverIP = serverIP;
 	this->serverPort = serverPort;
@@ -385,6 +385,49 @@ void WebSocketProxyServer::connectToServer()
 	}
 
 	writeLog("Connection to Web Socket server successful");
+}
+
+void WebSocketProxyServer::WebSocketEvents(HINTERNET hInternet, DWORD_PTR dwContext, DWORD dwInternetStatus, LPVOID lpvStatusInformation, DWORD dwStatusInformationLength)
+{
+
+}
+
+void WebSocketProxyServer::sockCommunication()
+{
+
+}
+
+void WebSocketProxyServer::createSocketEvents()
+{
+	bufToClientHasData = WSACreateEvent();
+	if (bufToClientHasData == WSA_INVALID_EVENT) {
+		closeConnection();
+		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+	}
+
+	bufToServHasData = WSACreateEvent();
+	if (bufToServHasData == WSA_INVALID_EVENT) {
+		closeConnection();
+		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+	}
+
+	clientReadySend = WSACreateEvent();
+	if (clientReadySend == WSA_INVALID_EVENT) {
+		closeConnection();
+		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+	}
+
+	serverReadySend = WSACreateEvent();
+	if (serverReadySend == WSA_INVALID_EVENT) {
+		closeConnection();
+		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+	}
+
+	if (WSAEventSelect(client_socket, clientReadySend, FD_ACCEPT | FD_READ | FD_CLOSE) != 0) {
+		closeConnection();
+		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+	}
+
 }
 
 void WebSocketProxyServer::stopServer()
