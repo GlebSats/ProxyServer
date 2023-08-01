@@ -64,23 +64,23 @@ void WebSocketConnection::connectToServer() {
 	WaitingForResponse.detach();
 	
 	HANDLE eventArr[2] = { *serviceStopEvent, serverSendResponse };
-	int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, 5000, FALSE);
-	if (eventResult == WSA_WAIT_FAILED) {
+	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 5000);
+	if (eventResult == WAIT_FAILED) {
 		CloseHandle(serverSendResponse);
-		throw ServException("Error while waiting for events: ", WSAGetLastError());
+		throw ServException("Error while waiting for events: ", GetLastError());
 	}
 
-	if (eventResult == WSA_WAIT_TIMEOUT) {
+	if (eventResult == WAIT_TIMEOUT) {
 		CloseHandle(serverSendResponse);
 		throw ServException("Response timeout expired: ");
 	}
 	
-	if (eventResult == WSA_WAIT_EVENT_0) {
+	if (eventResult == WAIT_OBJECT_0) {
 		CloseHandle(serverSendResponse);
 		throw ServException("Service stopped by SCM: ");
 	}
 
-	if (eventResult == WSA_WAIT_EVENT_0 + 1) {
+	if (eventResult == WAIT_OBJECT_0 + 1) {
 		if (SendResponseStatus == FALSE) {
 			throw ServException("Sending request to server error: ", GetLastError());
 		}
