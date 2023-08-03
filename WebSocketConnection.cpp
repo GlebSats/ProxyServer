@@ -64,7 +64,7 @@ void WebSocketConnection::connectToServer() {
 	WaitingForResponse.detach();
 	
 	HANDLE eventArr[2] = { *serviceStopEvent, serverSendResponse };
-	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 5000);
+	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 30000);
 	if (eventResult == WAIT_FAILED) {
 		CloseHandle(serverSendResponse);
 		throw ServException("Error while waiting for events: ", GetLastError());
