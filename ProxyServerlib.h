@@ -1,21 +1,36 @@
+#pragma once
+#include <iostream>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <winhttp.h>
+
 class ProxyServer {
 public:
 	ProxyServer();
 	virtual ~ProxyServer() = 0;
-	virtual void serverInitialization() = 0;
+	virtual void proxyServerInit() = 0;
 	virtual void WaitingForClients() = 0;
 	virtual void connectToTargetServer() = 0;
+	virtual void sendData() = 0;
+	virtual void receiveData() = 0;
+	virtual void closeConnection() = 0;
 public:
 	HANDLE* stopEvent;
+	HANDLE disconnect;
+	HANDLE readySend;
+	HANDLE dataToSend;
 };
 
-class TCPServer: public ProxyServer
+class TCPClient: public ProxyServer
 {
 public:
-	TCPServer(const char* listeningPort); // Constructor
-	~TCPServer();
-	void serverInitialization() override;
+	TCPClient(const char* listeningPort); // Constructor
+	~TCPClient();
+	void proxyServerInit() override;
 	void WaitingForClients() override;
+	void sendData() override;
+	void receiveData() override;
+	void closeConnection() override;
 private:
 	//Prohibited methods
 	void connectToTargetServer() override {}
@@ -27,8 +42,8 @@ private:
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
 	void createNewSocket(SOCKET& new_socket, addrinfo* sockInfo); // Create socket with addrinfo parameters
 	void acceptConnection();
-	TCPServer(const TCPServer&) = delete; // Copy not allowed
-	void operator=(const TCPServer&) = delete; // Assignment not allowed
+	TCPClient(const TCPClient&) = delete; // Copy not allowed
+	void operator=(const TCPClient&) = delete; // Assignment not allowed
 private:
 	const char* listeningPort;
 	addrinfo* lisSockInfo;
@@ -39,15 +54,18 @@ private:
 	SOCKET client_socket;
 };
 
-class TCPClient : public ProxyServer {
+class TCPTargetServer : public ProxyServer {
 public:
-	TCPClient(const char* serverIP, const char* serverPort);
-	~TCPClient();
+	TCPTargetServer(const char* serverIP, const char* serverPort);
+	~TCPTargetServer();
 	void connectToTargetServer() override;
 	//void serverHandler() override;
+	void sendData() override;
+	void receiveData() override;
+	void closeConnection() override;
 private:
 	//Prohibited methods
-	virtual void serverInitialization() override {}
+	virtual void proxyServerInit() override {}
 	virtual void WaitingForClients() override {}
 	//
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
@@ -55,8 +73,8 @@ private:
 	//void sockCommunication();
 	//void createSocketEvents();
 	//void closeConnection();
-	TCPClient(const TCPClient&) = delete; // Copy not allowed
-	void operator=(const TCPClient&) = delete; // Assignment not allowed
+	TCPTargetServer(const TCPTargetServer&) = delete; // Copy not allowed
+	void operator=(const TCPTargetServer&) = delete; // Assignment not allowed
 private:
 	const char* serverIP;
 	const char* serverPort;
@@ -93,4 +111,4 @@ private:
 	INTERNET_PORT serverPort;
 };
 
-void proxyConnection(ProxyServer& server, ProxyServer& client, HANDLE* stopEvent);
+void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
