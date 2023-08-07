@@ -6,7 +6,11 @@
 
 #define BUFFER_SIZE 1024
 
-ProxyServer::ProxyServer(): serviceStopEvent(nullptr)
+ProxyServer::ProxyServer(): 
+stopEvent(nullptr), 
+disconnect(NULL),
+readySend(NULL),
+dataToSend(NULL)
 {
 }
 
@@ -14,7 +18,7 @@ ProxyServer::~ProxyServer()
 {
 }
 
-TCPServer::TCPServer(const char* listeningPort) :
+TCPClient::TCPClient(const char* listeningPort) :
 lisSockInfo(nullptr),
 listeningPort(listeningPort),
 lis_socket(INVALID_SOCKET),
@@ -24,12 +28,12 @@ clientConnectionRequest(WSA_INVALID_EVENT)
 {
 }
 
-TCPServer::~TCPServer()
+TCPClient::~TCPClient()
 {
 	stopServer();
 }
 
-void TCPServer::serverInitialization()
+void TCPClient::proxyServerInit()
 {
 	initSockets();
 	createSockInfo("127.0.0.1", listeningPort, &lisSockInfo);
@@ -38,12 +42,12 @@ void TCPServer::serverInitialization()
 	listenState();
 }
 
-void TCPServer::WaitingForClients()
+void TCPClient::WaitingForClients()
 {
 	acceptConnection();
 }
 
-void TCPServer::initSockets()
+void TCPClient::initSockets()
 {
 	errState = WSAStartup(MAKEWORD(2, 2), &wsData);
 	if (errState != 0) {
@@ -51,7 +55,7 @@ void TCPServer::initSockets()
 	}
 }
 
-void TCPServer::createSockInfo(const char* ip, const char* port, addrinfo** sockInfo)
+void TCPClient::createSockInfo(const char* ip, const char* port, addrinfo** sockInfo)
 {
 	addrinfo addrInfo;
 	ZeroMemory(&addrInfo, sizeof(addrInfo));
@@ -64,7 +68,7 @@ void TCPServer::createSockInfo(const char* ip, const char* port, addrinfo** sock
 	}
 }
 
-void TCPServer::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
+void TCPClient::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 {
 	new_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (new_socket == INVALID_SOCKET) {
@@ -72,7 +76,7 @@ void TCPServer::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 	}
 }
 
-void TCPServer::bindSocket()
+void TCPClient::bindSocket()
 {
 	errState = bind(lis_socket, lisSockInfo->ai_addr, lisSockInfo->ai_addrlen);
 	if (errState != 0) {
@@ -80,7 +84,7 @@ void TCPServer::bindSocket()
 	}
 }
 
-void TCPServer::listenState()
+void TCPClient::listenState()
 {
 	errState = listen(lis_socket, SOMAXCONN);
 	if (errState != 0) {
@@ -89,7 +93,7 @@ void TCPServer::listenState()
 	writeLog("Server in listening state...");
 }
 
-void TCPServer::stopServer()
+void TCPClient::stopServer()
 {
 	freeaddrinfo(lisSockInfo);
 	if (client_socket != INVALID_SOCKET) {
@@ -103,7 +107,7 @@ void TCPServer::stopServer()
 	writeLog("Proxy server was stopped");
 }
 
-void TCPServer::acceptConnection()
+void TCPClient::acceptConnection()
 {
 	clientConnectionRequest = WSACreateEvent();
 	if (clientConnectionRequest == WSA_INVALID_EVENT) {
@@ -120,7 +124,7 @@ void TCPServer::acceptConnection()
 	ZeroMemory(&clientSockInfo, sizeof(clientSockInfo));
 	int clientSize = sizeof(clientSockInfo);
 
-	HANDLE eventArr[2] = { *serviceStopEvent, clientConnectionRequest };
+	HANDLE eventArr[2] = { *stopEvent, clientConnectionRequest };
 	int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
 	if (eventResult == WSA_WAIT_FAILED) {
 		WSACloseEvent(clientConnectionRequest);
@@ -140,7 +144,7 @@ void TCPServer::acceptConnection()
 	}
 }
 
-TCPClient::TCPClient(const char* serverIP, const char* serverPort)
+TCPTargetServer::TCPTargetServer(const char* serverIP, const char* serverPort)
 {
 	this->serverIP = serverIP;
 	this->serverPort = serverPort;
@@ -153,11 +157,11 @@ TCPClient::TCPClient(const char* serverIP, const char* serverPort)
 	errState = 0;
 }
 
-TCPClient::~TCPClient()
+TCPTargetServer::~TCPTargetServer()
 {
 }
 
-void TTCPClient::serverHandler()
+void TCPTargetServer::serverHandler()
 {
 	acceptConnection();
 	createSockInfo(serverIP, serverPort, &serverSockInfo);
@@ -166,7 +170,7 @@ void TTCPClient::serverHandler()
 	sockCommunication();
 }
 
-void TCPClient::connectToTargetServer()
+void TCPTargetServer::connectToTargetServer()
 {
 	createSockInfo(serverIP, serverPort, &serverSockInfo);
 	createNewSocket(server_socket, serverSockInfo);
@@ -178,7 +182,7 @@ void TCPClient::connectToTargetServer()
 	writeLog("Connection to Server successful");
 }
 
-void TCPClient::createSockInfo(const char* ip, const char* port, addrinfo** sockInfo)
+void TCPTargetServer::createSockInfo(const char* ip, const char* port, addrinfo** sockInfo)
 {
 	addrinfo addrInfo;
 	ZeroMemory(&addrInfo, sizeof(addrInfo));
@@ -191,7 +195,7 @@ void TCPClient::createSockInfo(const char* ip, const char* port, addrinfo** sock
 	}
 }
 
-void TCPClient::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
+void TCPTargetServer::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 {
 	new_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (new_socket == INVALID_SOCKET) {
@@ -518,19 +522,65 @@ void WebSocketConnection::stopServer()
 	}
 }
 
-void proxyConnection(ProxyServer& server, ProxyServer& client, HANDLE* stopEvent) {
-	server.stopEvent = stopEvent;
+void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent) {
+
 	client.stopEvent = stopEvent;
+	targetServer.stopEvent = stopEvent;
+
 	try
 	{
-		server.serverInitialization();
+		client.proxyServerInit();
+
 		while (WaitForSingleObject(stopEvent, 0) != WAIT_OBJECT_0) {
+
 			try
 			{
-				server.WaitingForClients();
-				server.connectToTargetServer();
-				HANDLE eventArr[5] = { *stopEvent, clientReadySend, serverReadySend, bufToServHasData, bufToClientHasData };
-				int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, INFINITE);
+				client.WaitingForClients();
+				targetServer.connectToTargetServer();
+
+				while (true)
+				{
+					HANDLE eventArr[7] = { *stopEvent, client.disconnect, targetServer.disconnect, client.readySend, client.dataToSend, targetServer.readySend, targetServer.dataToSend };
+					int eventResult = WaitForMultipleObjects(7, eventArr, FALSE, INFINITE);
+
+					if (eventResult == WAIT_FAILED) {
+						client.closeConnection();
+						targetServer.closeConnection();
+						throw ServException("Error while waiting for events: ", GetLastError());
+					}
+
+					if (eventResult == WAIT_OBJECT_0) {
+						client.closeConnection();
+						targetServer.closeConnection();
+						throw ServException("Connection has been severed: ", GetLastError());
+					}
+
+					if (WaitForSingleObject(eventArr[1], 0) == WAIT_OBJECT_0) {
+						client.closeConnection();
+						targetServer.closeConnection();
+					}
+
+					if (WaitForSingleObject(eventArr[2], 0) == WAIT_OBJECT_0) {
+						targetServer.closeConnection();
+						client.closeConnection();
+					}
+
+					if (WaitForSingleObject(eventArr[3], 0) == WAIT_OBJECT_0) {
+						client.receiveData();
+					}
+
+					if (WaitForSingleObject(eventArr[4], 0) == WAIT_OBJECT_0) {
+						targetServer.sendData();
+					}
+
+					if (WaitForSingleObject(eventArr[5], 0) == WAIT_OBJECT_0) {
+						targetServer.receiveData();
+					}
+
+					if (WaitForSingleObject(eventArr[6], 0) == WAIT_OBJECT_0) {
+						client.sendData();
+					}
+				}
 			}
 			catch (const ServException&)
 			{
