@@ -44,7 +44,80 @@ void TCPClient::proxyServerInit()
 
 void TCPClient::WaitingForClients()
 {
-	acceptConnection();
+	clientConnectionRequest = WSACreateEvent();
+	if (clientConnectionRequest == WSA_INVALID_EVENT) {
+		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+	}
+
+	if (WSAEventSelect(lis_socket, clientConnectionRequest, FD_ACCEPT) != 0) {
+		WSACloseEvent(clientConnectionRequest);
+		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+	}
+
+	char ipStr[INET_ADDRSTRLEN];
+	sockaddr_in clientSockInfo;
+	ZeroMemory(&clientSockInfo, sizeof(clientSockInfo));
+	int clientSize = sizeof(clientSockInfo);
+
+	HANDLE eventArr[2] = { *stopEvent, clientConnectionRequest };
+	int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
+	if (eventResult == WSA_WAIT_FAILED) {
+		WSACloseEvent(clientConnectionRequest);
+		throw ServException("Error while waiting for events: ", WSAGetLastError());
+	}
+
+	if (eventResult == WSA_WAIT_EVENT_0) {
+		WSACloseEvent(clientConnectionRequest);
+		throw ServException("Service stopped by SCM: ");
+	}
+
+	if (eventResult == WSA_WAIT_EVENT_0 + 1) {
+		client_socket = accept(lis_socket, (sockaddr*)&clientSockInfo, &clientSize);
+		if (client_socket == INVALID_SOCKET) {
+			throw ServException("Client connection error: ", WSAGetLastError());
+		}
+	}
+}
+
+void TCPClient::Handler()
+{
+	WSANETWORKEVENTS clientEvents;
+
+	clientReadySend = WSACreateEvent();
+	if (clientReadySend == WSA_INVALID_EVENT) {
+		/*closeConnection();
+		throw ServException("Create WSA Event failed: ", WSAGetLastError());*/
+	}
+
+	HANDLE eventArr[2] = { *stopEvent, clientReadySend };
+	while (true) {
+
+		int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
+		if (eventResult == WSA_WAIT_FAILED) {
+
+		}
+
+		if (eventResult == WSA_WAIT_EVENT_0) {
+
+		}
+
+		errState = WSAEnumNetworkEvents(client_socket, clientReadySend, &clientEvents);
+		if (errState == SOCKET_ERROR) {
+			/*closeConnection();
+			throw ServException("Error while getting information about events: ", WSAGetLastError());*/
+		}
+
+		if (clientEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
+			SetEvent(disconnect);
+			/*closeConnection();
+			throw ServException("Connection with the client has been severed: ", WSAGetLastError());*/
+		}
+
+		if ((clientEvents.lNetworkEvents & FD_READ) && (dataForServer == 0)) {
+			SetEvent(readySend);
+		}
+
+	}
 }
 
 void TCPClient::initSockets()
@@ -105,43 +178,6 @@ void TCPClient::stopServer()
 	WSACleanup();
 
 	writeLog("Proxy server was stopped");
-}
-
-void TCPClient::acceptConnection()
-{
-	clientConnectionRequest = WSACreateEvent();
-	if (clientConnectionRequest == WSA_INVALID_EVENT) {
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-	}
-
-	if (WSAEventSelect(lis_socket, clientConnectionRequest, FD_ACCEPT) != 0) {
-		WSACloseEvent(clientConnectionRequest);
-		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
-	}
-
-	char ipStr[INET_ADDRSTRLEN];
-	sockaddr_in clientSockInfo;
-	ZeroMemory(&clientSockInfo, sizeof(clientSockInfo));
-	int clientSize = sizeof(clientSockInfo);
-
-	HANDLE eventArr[2] = { *stopEvent, clientConnectionRequest };
-	int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
-	if (eventResult == WSA_WAIT_FAILED) {
-		WSACloseEvent(clientConnectionRequest);
-		throw ServException("Error while waiting for events: ", WSAGetLastError());
-	}
-
-	if (eventResult == WSA_WAIT_EVENT_0) {
-		WSACloseEvent(clientConnectionRequest);
-		throw ServException("Service stopped by SCM: ");
-	}
-
-	if (eventResult == WSA_WAIT_EVENT_0 + 1) {
-		client_socket = accept(lis_socket, (sockaddr*)&clientSockInfo, &clientSize);
-		if (client_socket == INVALID_SOCKET) {
-			throw ServException("Client connection error: ", WSAGetLastError());
-		}
-	}
 }
 
 TCPTargetServer::TCPTargetServer(const char* serverIP, const char* serverPort)
@@ -558,6 +594,7 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 					if (WaitForSingleObject(eventArr[1], 0) == WAIT_OBJECT_0) {
 						client.closeConnection();
 						targetServer.closeConnection();
+
 					}
 
 					if (WaitForSingleObject(eventArr[2], 0) == WAIT_OBJECT_0) {
