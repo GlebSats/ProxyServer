@@ -11,11 +11,13 @@ public:
 	virtual void proxyServerInit() = 0;
 	virtual void WaitingForClients() = 0;
 	virtual void connectToTargetServer() = 0;
+	virtual void Handler() = 0;
 	virtual void sendData() = 0;
 	virtual void receiveData() = 0;
 	virtual void closeConnection() = 0;
 public:
 	HANDLE* stopEvent;
+protected:
 	HANDLE disconnect;
 	HANDLE readySend;
 	HANDLE dataToSend;
@@ -28,6 +30,7 @@ public:
 	~TCPClient();
 	void proxyServerInit() override;
 	void WaitingForClients() override;
+	void Handler() override;
 	void sendData() override;
 	void receiveData() override;
 	void closeConnection() override;
@@ -41,7 +44,6 @@ private:
 	void stopServer(); // Freeing memory
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
 	void createNewSocket(SOCKET& new_socket, addrinfo* sockInfo); // Create socket with addrinfo parameters
-	void acceptConnection();
 	TCPClient(const TCPClient&) = delete; // Copy not allowed
 	void operator=(const TCPClient&) = delete; // Assignment not allowed
 private:
@@ -52,6 +54,7 @@ private:
 	int errState;
 	WSADATA wsData;
 	SOCKET client_socket;
+	WSAEVENT clientReadySend;
 };
 
 class TCPTargetServer : public ProxyServer {
@@ -59,7 +62,7 @@ public:
 	TCPTargetServer(const char* serverIP, const char* serverPort);
 	~TCPTargetServer();
 	void connectToTargetServer() override;
-	//void serverHandler() override;
+	void Handler() override;
 	void sendData() override;
 	void receiveData() override;
 	void closeConnection() override;
