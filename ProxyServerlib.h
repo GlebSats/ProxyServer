@@ -5,6 +5,8 @@
 #include <winhttp.h>
 
 class ProxyServer {
+	friend void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
+
 public:
 	ProxyServer();
 	virtual ~ProxyServer() = 0;
@@ -35,26 +37,25 @@ public:
 	void receiveData() override;
 	void closeConnection() override;
 private:
-	//Prohibited methods
+	//Prohibited method
 	void connectToTargetServer() override {}
 	//
 	void initSockets(); // Function initiates use of the Winsock DLL
 	void bindSocket(); // Function associates a local address with a socket
 	void listenState(); // Set socket to listen state
-	void stopServer(); // Freeing memory
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
 	void createNewSocket(SOCKET& new_socket, addrinfo* sockInfo); // Create socket with addrinfo parameters
 	TCPClient(const TCPClient&) = delete; // Copy not allowed
 	void operator=(const TCPClient&) = delete; // Assignment not allowed
 private:
+	WSADATA wsData;
 	const char* listeningPort;
 	addrinfo* lisSockInfo;
 	SOCKET lis_socket;
-	WSAEVENT clientConnectionRequest;
-	int errState;
-	WSADATA wsData;
 	SOCKET client_socket;
+	WSAEVENT clientConnectionRequest;
 	WSAEVENT clientReadySend;
+	int errState;
 };
 
 class TCPTargetServer : public ProxyServer {
@@ -73,9 +74,6 @@ private:
 	//
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
 	void createNewSocket(SOCKET& new_socket, addrinfo* sockInfo); // Create socket with addrinfo parameters
-	//void sockCommunication();
-	//void createSocketEvents();
-	//void closeConnection();
 	TCPTargetServer(const TCPTargetServer&) = delete; // Copy not allowed
 	void operator=(const TCPTargetServer&) = delete; // Assignment not allowed
 private:
@@ -83,10 +81,7 @@ private:
 	const char* serverPort;
 	addrinfo* serverSockInfo;
 	SOCKET server_socket;
-	WSAEVENT bufToClientHasData;
-	WSAEVENT bufToServHasData;
-	WSAEVENT clientReadySend;
-	WSAEVENT serverReadySend;
+	WSAEVENT targetServerReadySend;
 	int errState;
 };
 
