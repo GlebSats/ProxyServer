@@ -18,19 +18,33 @@ ProxyServer::~ProxyServer()
 {
 }
 
+// TCP Client 
+
 TCPClient::TCPClient(const char* listeningPort) :
-lisSockInfo(nullptr),
 listeningPort(listeningPort),
+lisSockInfo(nullptr),
 lis_socket(INVALID_SOCKET),
 client_socket(INVALID_SOCKET),
-errState(0), 
-clientConnectionRequest(WSA_INVALID_EVENT)
+clientConnectionRequest(WSA_INVALID_EVENT),
+clientReadySend(WSA_INVALID_EVENT),
+errState(0)
 {
 }
 
 TCPClient::~TCPClient()
 {
-	stopServer();
+	freeaddrinfo(lisSockInfo);
+
+	if (client_socket != INVALID_SOCKET) {
+		closesocket(client_socket);
+	}
+	if (lis_socket != INVALID_SOCKET) {
+		closesocket(lis_socket);
+	}
+
+	WSACleanup();
+
+	writeLog("TCPClient memory freed");
 }
 
 void TCPClient::proxyServerInit()
@@ -85,8 +99,9 @@ void TCPClient::Handler()
 
 	clientReadySend = WSACreateEvent();
 	if (clientReadySend == WSA_INVALID_EVENT) {
-		/*closeConnection();
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());*/
+		writeLog("Create WSA Event failed: " + WSAGetLastError());
+		SetEvent(disconnect);
+		return;
 	}
 
 	HANDLE eventArr[2] = { *stopEvent, clientReadySend };
@@ -94,30 +109,55 @@ void TCPClient::Handler()
 
 		int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
-
+			writeLog("Error while waiting for events: " + WSAGetLastError());
+			SetEvent(disconnect);
+			return;
 		}
 
 		if (eventResult == WSA_WAIT_EVENT_0) {
-
+			return;
 		}
 
 		errState = WSAEnumNetworkEvents(client_socket, clientReadySend, &clientEvents);
 		if (errState == SOCKET_ERROR) {
-			/*closeConnection();
-			throw ServException("Error while getting information about events: ", WSAGetLastError());*/
+			writeLog("Error while getting information about events: " + WSAGetLastError());
+			SetEvent(disconnect);
+			return;
 		}
 
 		if (clientEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
+			writeLog("Connection with the client has been severed: " + WSAGetLastError());
 			SetEvent(disconnect);
-			/*closeConnection();
-			throw ServException("Connection with the client has been severed: ", WSAGetLastError());*/
+			return;
 		}
 
-		if ((clientEvents.lNetworkEvents & FD_READ) && (dataForServer == 0)) {
+		if (clientEvents.lNetworkEvents & FD_READ) {
 			SetEvent(readySend);
 		}
 
 	}
+}
+
+void TCPClient::sendData()
+{
+	int send_data = send(client_socket, bufToClient + indexForClient, dataForClient, 0);
+	if (send_data == SOCKET_ERROR) {
+		if (WSAGetLastError() != WSAEWOULDBLOCK) {
+			closeConnection();
+			throw ServException("Connection with the client has been severed: ", WSAGetLastError());
+		}
+	}
+	else {
+		dataForClient -= send_data;
+		indexForClient += send_data;
+	}
+}
+
+void TCPClient::closeConnection()
+{
+	WSACloseEvent(clientConnectionRequest);
+	shutdown(client_socket, SD_BOTH);
+	closesocket(client_socket);
 }
 
 void TCPClient::initSockets()
@@ -166,44 +206,27 @@ void TCPClient::listenState()
 	writeLog("Server in listening state...");
 }
 
-void TCPClient::stopServer()
-{
-	freeaddrinfo(lisSockInfo);
-	if (client_socket != INVALID_SOCKET) {
-		closesocket(client_socket);
-	}
-	if (lis_socket != INVALID_SOCKET) {
-		closesocket(lis_socket);
-	}
-	WSACleanup();
+// TCP Target Server
 
-	writeLog("Proxy server was stopped");
-}
-
-TCPTargetServer::TCPTargetServer(const char* serverIP, const char* serverPort)
+TCPTargetServer::TCPTargetServer(const char* serverIP, const char* serverPort): 
+	serverIP (serverIP),
+	serverPort (serverPort),
+	serverSockInfo(nullptr),
+	server_socket(INVALID_SOCKET),
+	targetServerReadySend(WSA_INVALID_EVENT),
+	errState(0)
 {
-	this->serverIP = serverIP;
-	this->serverPort = serverPort;
-	serverSockInfo = nullptr;
-	server_socket = INVALID_SOCKET;
-	bufToClientHasData = WSA_INVALID_EVENT;
-	bufToServHasData = WSA_INVALID_EVENT;
-	clientReadySend = WSA_INVALID_EVENT;
-	serverReadySend = WSA_INVALID_EVENT;
-	errState = 0;
 }
 
 TCPTargetServer::~TCPTargetServer()
 {
-}
+	freeaddrinfo(serverSockInfo);
 
-void TCPTargetServer::serverHandler()
-{
-	acceptConnection();
-	createSockInfo(serverIP, serverPort, &serverSockInfo);
-	createNewSocket(server_socket, serverSockInfo);
-	connectToServer();
-	sockCommunication();
+	if (server_socket != INVALID_SOCKET) {
+		closesocket(server_socket);
+	}
+	
+	writeLog("TCPTargetServer memory freed");
 }
 
 void TCPTargetServer::connectToTargetServer()
@@ -216,6 +239,58 @@ void TCPTargetServer::connectToTargetServer()
 		throw ServException("Connection to Web Server failed: ", WSAGetLastError());
 	}
 	writeLog("Connection to Server successful");
+}
+
+void TCPTargetServer::Handler()
+{
+	WSANETWORKEVENTS targetServerEvents;
+
+	targetServerReadySend = WSACreateEvent();
+	if (targetServerReadySend == WSA_INVALID_EVENT) {
+		writeLog("Create WSA Event failed: " + WSAGetLastError());
+		SetEvent(disconnect);
+		return;
+	}
+
+	HANDLE eventArr[2] = { *stopEvent, targetServerReadySend };
+	while (true) {
+
+		int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
+		if (eventResult == WSA_WAIT_FAILED) {
+			writeLog("Error while waiting for events: " + WSAGetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if (eventResult == WSA_WAIT_EVENT_0) {
+			return;
+		}
+
+		errState = WSAEnumNetworkEvents(server_socket, targetServerReadySend, &targetServerEvents);
+		if (errState == SOCKET_ERROR) {
+			writeLog("Error while getting information about events: " + WSAGetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if (targetServerEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
+			writeLog("Connection with the target server has been severed: " + WSAGetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if (targetServerEvents.lNetworkEvents & FD_READ) {
+			SetEvent(readySend);
+		}
+
+	}
+}
+
+void TCPTargetServer::closeConnection()
+{
+	WSACloseEvent(targetServerReadySend);
+	shutdown(server_socket, SD_BOTH);
+	closesocket(server_socket);
 }
 
 void TCPTargetServer::createSockInfo(const char* ip, const char* port, addrinfo** sockInfo)
@@ -354,54 +429,44 @@ void TCPConnection::sockCommunication()
 	}
 }
 
-void TCPConnection::createSocketEvents()
-{
-	bufToClientHasData = WSACreateEvent();
-	if (bufToClientHasData == WSA_INVALID_EVENT) {
-		closeConnection();
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-	}
+//void TCPConnection::createSocketEvents()
+//{
+//	bufToClientHasData = WSACreateEvent();
+//	if (bufToClientHasData == WSA_INVALID_EVENT) {
+//		closeConnection();
+//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+//	}
+//
+//	bufToServHasData = WSACreateEvent();
+//	if (bufToServHasData == WSA_INVALID_EVENT) {
+//		closeConnection();
+//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+//	}
+//
+//	clientReadySend = WSACreateEvent();
+//	if (clientReadySend == WSA_INVALID_EVENT) {
+//		closeConnection();
+//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+//	}
+//
+//	serverReadySend = WSACreateEvent();
+//	if (serverReadySend == WSA_INVALID_EVENT) {
+//		closeConnection();
+//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+//	}
+//
+//	if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
+//		closeConnection();
+//		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+//	}
+//
+//	if (WSAEventSelect(server_socket, serverReadySend, FD_READ | FD_CLOSE) != 0) {
+//		closeConnection();
+//		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+//	}
+//}
 
-	bufToServHasData = WSACreateEvent();
-	if (bufToServHasData == WSA_INVALID_EVENT) {
-		closeConnection();
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-	}
-
-	clientReadySend = WSACreateEvent();
-	if (clientReadySend == WSA_INVALID_EVENT) {
-		closeConnection();
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-	}
-
-	serverReadySend = WSACreateEvent();
-	if (serverReadySend == WSA_INVALID_EVENT) {
-		closeConnection();
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-	}
-
-	if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
-		closeConnection();
-		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
-	}
-
-	if (WSAEventSelect(server_socket, serverReadySend, FD_READ | FD_CLOSE) != 0) {
-		closeConnection();
-		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
-	}
-}
-
-void TCPConnection::closeConnection()
-{
-	WSACloseEvent(bufToClientHasData);
-	WSACloseEvent(bufToServHasData);
-	WSACloseEvent(clientReadySend);
-	WSACloseEvent(serverReadySend);
-	shutdown(server_socket, SD_BOTH);
-	shutdown(client_socket, SD_BOTH);
-	closesocket(server_socket);
-	closesocket(client_socket);
-}
+//
 
 WebSocketConnection::WebSocketConnection(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort) : StartServer(listeningPort)
 {
@@ -558,6 +623,8 @@ void WebSocketConnection::stopServer()
 	}
 }
 
+// Proxy server connection function
+
 void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent) {
 
 	client.stopEvent = stopEvent;
@@ -573,6 +640,7 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 			{
 				client.WaitingForClients();
 				targetServer.connectToTargetServer();
+				//threads client a server handlers
 
 				while (true)
 				{
@@ -582,24 +650,27 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 					if (eventResult == WAIT_FAILED) {
 						client.closeConnection();
 						targetServer.closeConnection();
-						throw ServException("Error while waiting for events: ", GetLastError());
+						writeLog("Error while waiting for events: " + GetLastError());
+						break;
 					}
 
 					if (eventResult == WAIT_OBJECT_0) {
 						client.closeConnection();
 						targetServer.closeConnection();
-						throw ServException("Connection has been severed: ", GetLastError());
+						writeLog("Connection has been severed: " + GetLastError());
+						break;
 					}
 
 					if (WaitForSingleObject(eventArr[1], 0) == WAIT_OBJECT_0) {
 						client.closeConnection();
 						targetServer.closeConnection();
-
+						break;
 					}
 
 					if (WaitForSingleObject(eventArr[2], 0) == WAIT_OBJECT_0) {
 						targetServer.closeConnection();
 						client.closeConnection();
+						break;
 					}
 
 					if (WaitForSingleObject(eventArr[3], 0) == WAIT_OBJECT_0) {
@@ -619,14 +690,14 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 					}
 				}
 			}
-			catch (const ServException&)
+			catch (const ServException& ex)
 			{
-
+				writeLog(ex.GetErrorType() + ex.GetErrorCode());
 			}
 		}
 	}
 	catch (const ServException& ex)
 	{
-
+		writeLog(ex.GetErrorType() + ex.GetErrorCode());
 	}
 }
