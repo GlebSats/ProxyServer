@@ -4,6 +4,8 @@
 #include <WS2tcpip.h>
 #include <winhttp.h>
 
+#define BUFFER_SIZE 1024
+
 class ProxyServer {
 	friend void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
 
@@ -14,12 +16,15 @@ public:
 	virtual void WaitingForClients() = 0;
 	virtual void connectToTargetServer() = 0;
 	virtual void Handler() = 0;
-	virtual void sendData() = 0;
+	virtual int sendData(const char* pData, int length) = 0;
 	virtual void receiveData() = 0;
 	virtual void closeConnection() = 0;
 public:
 	HANDLE* stopEvent;
 protected:
+	char receiveBuffer[BUFFER_SIZE];
+	int dataInReceiveBuffer;
+	int indexForRecData;
 	HANDLE disconnect;
 	HANDLE readySend;
 	HANDLE dataToSend;
@@ -33,7 +38,7 @@ public:
 	void proxyServerInit() override;
 	void WaitingForClients() override;
 	void Handler() override;
-	void sendData() override;
+	int sendData(const char* pData, int length) override;
 	void receiveData() override;
 	void closeConnection() override;
 private:
@@ -64,7 +69,7 @@ public:
 	~TCPTargetServer();
 	void connectToTargetServer() override;
 	void Handler() override;
-	void sendData() override;
+	int sendData(const char* pData, int length) override;
 	void receiveData() override;
 	void closeConnection() override;
 private:
@@ -85,28 +90,29 @@ private:
 	int errState;
 };
 
-class WebSocketConnection : public StartServer {
-public:
-	WebSocketConnection(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort);
-	~WebSocketConnection();
-	void serverInitialization() override;
-	void serverHandler() override;
-private:
-	void WaitResponseFromServer();
-	void connectToServer();
-	void sockCommunication();
-	void createSocketEvents();
-	void stopServer();
-private:
-	bool SendResponseStatus;
-	bool ResponseStatus;
-	HANDLE serverSendResponse;
-	HINTERNET SessionHandle;
-	HINTERNET ConnectionHandle;
-	HINTERNET RequestHandle;
-	HINTERNET WebSocketHandle;
-	LPCWSTR serverIP;
-	INTERNET_PORT serverPort;
-};
+//class WebSocketConnection : public StartServer {
+//public:
+//	WebSocketConnection(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort);
+//	~WebSocketConnection();
+//	void serverInitialization() override;
+//	void serverHandler() override;
+//private:
+//	void WaitResponseFromServer();
+//	void connectToServer();
+//	void sockCommunication();
+//	void createSocketEvents();
+//	void stopServer();
+//private:
+//	bool SendResponseStatus;
+//	bool ResponseStatus;
+//	HANDLE serverSendResponse;
+//	HINTERNET SessionHandle;
+//	HINTERNET ConnectionHandle;
+//	HINTERNET RequestHandle;
+//	HINTERNET WebSocketHandle;
+//	LPCWSTR serverIP;
+//	INTERNET_PORT serverPort;
+//};
 
 void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
+
