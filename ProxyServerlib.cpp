@@ -19,6 +19,29 @@ ProxyServer::~ProxyServer()
 {
 }
 
+void ProxyServer::eventsCreation()
+{
+	disconnect = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (disconnect == NULL) {
+		throw ServException("Create Event failed: ", GetLastError());
+	}
+
+	readySend = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (readySend == NULL) {
+		throw ServException("Create Event failed: ", GetLastError());
+	}
+
+	dataToSend = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (dataToSend == NULL) {
+		throw ServException("Create Event failed: ", GetLastError());
+	}
+}
+void ProxyServer::eventsDeleting()
+{
+	CloseHandle(dataToSend);
+	CloseHandle(readySend);
+	CloseHandle(disconnect);
+}
 // TCP Client 
 
 TCPClient::TCPClient(const char* listeningPort) :
@@ -48,7 +71,7 @@ TCPClient::~TCPClient()
 	writeLog("TCPClient memory freed");
 }
 
-void TCPClient::proxyServerInit()
+void TCPClient::Initialization()
 {
 	initSockets();
 	createSockInfo("127.0.0.1", listeningPort, &lisSockInfo);
@@ -59,6 +82,7 @@ void TCPClient::proxyServerInit()
 
 void TCPClient::WaitingForClients()
 {
+	eventsCreation();
 	clientConnectionRequest = WSACreateEvent();
 	if (clientConnectionRequest == WSA_INVALID_EVENT) {
 		throw ServException("Create WSA Event failed: ", WSAGetLastError());
@@ -105,23 +129,29 @@ void TCPClient::Handler()
 		return;
 	}
 
-	HANDLE eventArr[2] = { *stopEvent, clientReadySend };
+	if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
+		writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+		SetEvent(disconnect);
+		return;
+	}
+
+	HANDLE eventArr[3] = { *stopEvent, disconnect, clientReadySend };
 	while (true) {
 
-		int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
+		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
 			writeLog("Error while waiting for events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
 
-		if (eventResult == WSA_WAIT_EVENT_0) {
+		if ((eventResult == WSA_WAIT_EVENT_0) || (eventResult == WSA_WAIT_EVENT_0 + 1)) {
 			return;
 		}
 
 		errState = WSAEnumNetworkEvents(client_socket, clientReadySend, &clientEvents);
 		if (errState == SOCKET_ERROR) {
-			writeLog("Error while getting information about events: ", WSAGetLastError());
+			writeLog("Client: Error while getting information about events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -134,7 +164,6 @@ void TCPClient::Handler()
 
 		if (clientEvents.lNetworkEvents & FD_READ) {
 			SetEvent(readySend);
-			return;
 		}
 
 	}
@@ -177,6 +206,7 @@ void TCPClient::closeConnection()
 	WSACloseEvent(clientConnectionRequest);
 	shutdown(client_socket, SD_BOTH);
 	closesocket(client_socket);
+	eventsDeleting();
 }
 
 void TCPClient::initSockets()
@@ -250,6 +280,7 @@ TCPTargetServer::~TCPTargetServer()
 
 void TCPTargetServer::connectToTargetServer()
 {
+	eventsCreation();
 	createSockInfo(serverIP, serverPort, &serverSockInfo);
 	createNewSocket(server_socket, serverSockInfo);
 
@@ -271,23 +302,29 @@ void TCPTargetServer::Handler()
 		return;
 	}
 
-	HANDLE eventArr[2] = { *stopEvent, targetServerReadySend };
+	if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
+		writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+		SetEvent(disconnect);
+		return;
+	}
+
+	HANDLE eventArr[3] = { *stopEvent, disconnect, targetServerReadySend };
 	while (true) {
 
-		int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
+		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
 			writeLog("Error while waiting for events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
 
-		if (eventResult == WSA_WAIT_EVENT_0) {
+		if ((eventResult == WSA_WAIT_EVENT_0) || (eventResult == WSA_WAIT_EVENT_0 + 1)) {
 			return;
 		}
 
 		errState = WSAEnumNetworkEvents(server_socket, targetServerReadySend, &targetServerEvents);
 		if (errState == SOCKET_ERROR) {
-			writeLog("Error while getting information about events: ", WSAGetLastError());
+			writeLog("Server: Error while getting information about events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -342,6 +379,7 @@ void TCPTargetServer::closeConnection()
 	WSACloseEvent(targetServerReadySend);
 	shutdown(server_socket, SD_BOTH);
 	closesocket(server_socket);
+	eventsDeleting();
 }
 
 void TCPTargetServer::createSockInfo(const char* ip, const char* port, addrinfo** sockInfo)
@@ -683,7 +721,8 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 
 	try
 	{
-		client.proxyServerInit();
+		client.Initialization();
+		targetServer.Initialization();
 
 		while (WaitForSingleObject(stopEvent, 0) != WAIT_OBJECT_0) {
 
@@ -723,12 +762,14 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 					}
 
 					if (WaitForSingleObject(eventArr[1], 0) == WAIT_OBJECT_0) {
+						SetEvent(targetServer.disconnect);
 						client.closeConnection();
 						targetServer.closeConnection();
 						break;
 					}
 
 					if (WaitForSingleObject(eventArr[2], 0) == WAIT_OBJECT_0) {
+						SetEvent(client.disconnect);
 						targetServer.closeConnection();
 						client.closeConnection();
 						break;
@@ -736,6 +777,7 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 
 					if (WaitForSingleObject(eventArr[3], 0) == WAIT_OBJECT_0) {
 						client.receiveData();
+						ResetEvent(client.readySend);
 					}
 
 					if (WaitForSingleObject(eventArr[4], 0) == WAIT_OBJECT_0) {
@@ -746,6 +788,7 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 
 					if (WaitForSingleObject(eventArr[5], 0) == WAIT_OBJECT_0) {
 						targetServer.receiveData();
+						ResetEvent(targetServer.readySend);
 					}
 
 					if (WaitForSingleObject(eventArr[6], 0) == WAIT_OBJECT_0) {
