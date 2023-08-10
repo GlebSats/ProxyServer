@@ -12,8 +12,10 @@ class ProxyServer {
 public:
 	ProxyServer();
 	virtual ~ProxyServer() = 0;
+// jedna spolecna funkce
 	virtual void Initialization() = 0;
 	virtual void WaitingForClients() = 0;
+//
 	virtual void connectToTargetServer() = 0;
 	virtual void Handler() = 0;
 	virtual int sendData(const char* pData, int length) = 0;
