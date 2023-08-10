@@ -6,6 +6,7 @@
 
 #define BUFFER_SIZE 1024
 
+// nazvy naopak
 class ProxyServer {
 	friend void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
 
