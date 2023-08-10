@@ -12,13 +12,16 @@ class ProxyServer {
 public:
 	ProxyServer();
 	virtual ~ProxyServer() = 0;
-	virtual void proxyServerInit() = 0;
+	virtual void Initialization() = 0;
 	virtual void WaitingForClients() = 0;
 	virtual void connectToTargetServer() = 0;
 	virtual void Handler() = 0;
 	virtual int sendData(const char* pData, int length) = 0;
 	virtual void receiveData() = 0;
 	virtual void closeConnection() = 0;
+protected:
+	void eventsCreation();
+	void eventsDeleting();
 public:
 	HANDLE* stopEvent;
 protected:
@@ -35,7 +38,7 @@ class TCPClient: public ProxyServer
 public:
 	TCPClient(const char* listeningPort); // Constructor
 	~TCPClient();
-	void proxyServerInit() override;
+	void Initialization() override;
 	void WaitingForClients() override;
 	void Handler() override;
 	int sendData(const char* pData, int length) override;
@@ -67,6 +70,7 @@ class TCPTargetServer : public ProxyServer {
 public:
 	TCPTargetServer(const char* serverIP, const char* serverPort);
 	~TCPTargetServer();
+	void Initialization() override {}
 	void connectToTargetServer() override;
 	void Handler() override;
 	int sendData(const char* pData, int length) override;
@@ -74,7 +78,6 @@ public:
 	void closeConnection() override;
 private:
 	//Prohibited methods
-	virtual void proxyServerInit() override {}
 	virtual void WaitingForClients() override {}
 	//
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
