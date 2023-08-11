@@ -4,7 +4,7 @@
 #include <string>
 #include <thread>
 
-ProxyServer::ProxyServer(): 
+ProxyConnection::ProxyConnection(): 
 stopEvent(nullptr), 
 disconnect(NULL),
 readySend(NULL),
@@ -15,11 +15,11 @@ indexForRecData(0)
 	ZeroMemory(&receiveBuffer, sizeof(receiveBuffer));
 }
 
-ProxyServer::~ProxyServer()
+ProxyConnection::~ProxyConnection()
 {
 }
 
-void ProxyServer::eventsCreation()
+void ProxyConnection::eventsCreation()
 {
 	disconnect = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (disconnect == NULL) {
@@ -36,7 +36,7 @@ void ProxyServer::eventsCreation()
 		throw ServException("Create Event failed: ", GetLastError());
 	}
 }
-void ProxyServer::eventsDeleting()
+void ProxyConnection::eventsDeleting()
 {
 	CloseHandle(dataToSend);
 	CloseHandle(readySend);
@@ -80,7 +80,7 @@ void TCPClient::Initialization()
 	listenState();
 }
 
-void TCPClient::WaitingForClients()
+void TCPClient::Connection()
 {
 	eventsCreation();
 	clientConnectionRequest = WSACreateEvent();
@@ -278,7 +278,7 @@ TCPTargetServer::~TCPTargetServer()
 	writeLog("TCPTargetServer memory freed");
 }
 
-void TCPTargetServer::connectToTargetServer()
+void TCPTargetServer::Connection()
 {
 	eventsCreation();
 	createSockInfo(serverIP, serverPort, &serverSockInfo);
@@ -403,261 +403,117 @@ void TCPTargetServer::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 	}
 }
 
-//void TCPConnection::sockCommunication()
-//{
-//	WSANETWORKEVENTS clientEvents;
-//	WSANETWORKEVENTS serverEvents;
-//	char bufToClient[BUFFER_SIZE];
-//	char bufToServer[BUFFER_SIZE];
-//	ZeroMemory(&bufToClient, sizeof(bufToClient));
-//	ZeroMemory(&bufToServer, sizeof(bufToServer));
-//	int dataForClient = 0;
-//	int dataForServer = 0;
-//	int indexForClient = 0;
-//	int indexForServer = 0;
-//
-//	createSocketEvents();
-//	HANDLE eventArr[5] = { *serviceStopEvent, clientReadySend, serverReadySend, bufToServHasData, bufToClientHasData };
-//
-//	while (true) {
-//
-//		int eventResult = WSAWaitForMultipleEvents(5, eventArr, FALSE, INFINITE, FALSE);
-//		if (eventResult == WSA_WAIT_FAILED) {
-//			closeConnection();
-//			throw ServException("Error while waiting for events: ", WSAGetLastError());
-//		}
-//
-//		if (eventResult == WSA_WAIT_EVENT_0) {
-//			closeConnection();
-//			throw ServException("Connection has been severed: ", WSAGetLastError());
-//		}
-//
-//		errState = WSAEnumNetworkEvents(client_socket, clientReadySend, &clientEvents);
-//		if (errState == SOCKET_ERROR) {
-//			closeConnection();
-//			throw ServException("Error while getting information about events: ", WSAGetLastError());
-//		}
-//
-//		errState = WSAEnumNetworkEvents(server_socket, serverReadySend, &serverEvents);
-//		if (errState == SOCKET_ERROR) {
-//			closeConnection();
-//			throw ServException("Error while getting information about events: ", WSAGetLastError());
-//		}
-//
-//		if (clientEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
-//			closeConnection();
-//			throw ServException("Connection with the client has been severed: ", WSAGetLastError());
-//		}
-//
-//		if (serverEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
-//			closeConnection();
-//			throw ServException("Connection with the server has been severed: ", WSAGetLastError());
-//		}
-//
-//		if ((clientEvents.lNetworkEvents & FD_READ) && (dataForServer == 0)) {
-//			int rec_data = recv(client_socket, bufToServer, BUFFER_SIZE, 0);
-//			if (rec_data == SOCKET_ERROR) {
-//				closeConnection();
-//				throw ServException("Connection with the client has been severed: ", WSAGetLastError());
-//			}
-//			dataForServer = rec_data;
-//			indexForServer = 0;
-//		}
-//
-//		if ((serverEvents.lNetworkEvents & FD_READ) && (dataForClient == 0)) {
-//			int rec_data = recv(server_socket, bufToClient, BUFFER_SIZE, 0);
-//			if (rec_data == SOCKET_ERROR) {
-//				closeConnection();
-//				throw ServException("Connection with the server has been severed: ", WSAGetLastError());
-//			}
-//			dataForClient = rec_data;
-//			indexForClient = 0;
-//		}
-//
-//		if (dataForServer != 0) {
-//			int send_data = send(server_socket, bufToServer + indexForServer, dataForServer, 0);
-//			if (send_data == SOCKET_ERROR) {
-//				if (WSAGetLastError() != WSAEWOULDBLOCK) {
-//					closeConnection();
-//					throw ServException("Connection with the server has been severed: ", WSAGetLastError());
-//				}
-//			}
-//			else {
-//				dataForServer -= send_data;
-//				indexForServer += send_data;
-//			}
-//		}
-//
-//		if (dataForClient != 0) {
-//			int send_data = send(client_socket, bufToClient + indexForClient, dataForClient, 0);
-//			if (send_data == SOCKET_ERROR) {
-//				if (WSAGetLastError() != WSAEWOULDBLOCK) {
-//					closeConnection();
-//					throw ServException("Connection with the client has been severed: ", WSAGetLastError());
-//				}
-//			}
-//			else {
-//				dataForClient -= send_data;
-//				indexForClient += send_data;
-//			}
-//		}
-//
-//		if (dataForClient != 0) {
-//			WSASetEvent(bufToClientHasData);
-//		}
-//		else {
-//			WSAResetEvent(bufToClientHasData);
-//		}
-//
-//		if (dataForServer != 0) {
-//			WSASetEvent(bufToServHasData);
-//		}
-//		else {
-//			WSAResetEvent(bufToServHasData);
-//		}
-//	}
-//}
+// WebSocket Server
 
-//void TCPConnection::createSocketEvents()
-//{
-//	bufToClientHasData = WSACreateEvent();
-//	if (bufToClientHasData == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	bufToServHasData = WSACreateEvent();
-//	if (bufToServHasData == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	clientReadySend = WSACreateEvent();
-//	if (clientReadySend == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	serverReadySend = WSACreateEvent();
-//	if (serverReadySend == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
-//		closeConnection();
-//		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
-//	}
-//
-//	if (WSAEventSelect(server_socket, serverReadySend, FD_READ | FD_CLOSE) != 0) {
-//		closeConnection();
-//		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
-//	}
-//}
+WebSocketServer::WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort):
+	serverIP(serverIP),
+	serverPort(serverPort),
+	SendResponseStatus(FALSE),
+	ReceiveResponseStatus(FALSE),
+	serverSendResponse(NULL),
+	SessionHandle(NULL),
+	ConnectionHandle(NULL),
+	RequestHandle(NULL),
+	WebSocketHandle(NULL)
+{
+}
 
-//
+WebSocketServer::~WebSocketServer()
+{
+	if (SessionHandle != NULL) {
+		WinHttpCloseHandle(SessionHandle);
+	}
+	if (ConnectionHandle != NULL) {
+		WinHttpCloseHandle(ConnectionHandle);
+	}
+	if (RequestHandle != NULL) {
+		WinHttpCloseHandle(RequestHandle);
+	}
+	if (WebSocketHandle != NULL) {
+		WinHttpCloseHandle(WebSocketHandle);
+	}
+	CloseHandle(serverSendResponse);
+}
 
-//WebSocketConnection::WebSocketConnection(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort) : StartServer(listeningPort)
-//{
-//	this->serverIP = serverIP;
-//	this->serverPort = serverPort;
-//	SendResponseStatus = FALSE;
-//	ResponseStatus = FALSE;
-//	serverSendResponse = NULL;
-//	SessionHandle = NULL;
-//	ConnectionHandle = NULL;
-//	RequestHandle = NULL;
-//	WebSocketHandle = NULL;
-//}
-//
-//WebSocketConnection::~WebSocketConnection()
-//{
-//	stopServer();
-//}
-//
-//void WebSocketConnection::serverInitialization()
-//{
-//	StartServer::serverInitialization();
-//	SessionHandle = WinHttpOpen(L"ProxyServer", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-//	if (SessionHandle == NULL) {
-//		throw ServException("WinHTTP initialization error: ", GetLastError());
-//	}
-//}
-//
-//void WebSocketConnection::serverHandler()
-//{
-//	acceptConnection();
-//	connectToServer();
-//}
-//
-//void WebSocketConnection::WaitResponseFromServer()
-//{
-//	SendResponseStatus = WinHttpSendRequest(RequestHandle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0);
-//	ResponseStatus = WinHttpReceiveResponse(RequestHandle, NULL);
-//	SetEvent(serverSendResponse);
-//}
-//
-//void WebSocketConnection::connectToServer() {
-//	serverSendResponse = CreateEvent(NULL, TRUE, FALSE, NULL);
-//	if (serverSendResponse == NULL) {
-//		throw ServException("Create Event Error: ", GetLastError());
-//	}
-//
-//	ConnectionHandle = WinHttpConnect(SessionHandle, serverIP, serverPort, 0);
-//	if (ConnectionHandle == NULL) {
-//		throw ServException("Target server initialization error: ", GetLastError());
-//	}
-//
-//	RequestHandle = WinHttpOpenRequest(ConnectionHandle, L"GET", NULL, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
-//	if (RequestHandle == NULL) {
-//		throw ServException("HTTP request creation error: ", GetLastError());
-//	}
-//
-//#pragma warning(suppress : 6387)
-//	if (WinHttpSetOption(RequestHandle, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, NULL, 0) == FALSE) {
-//		throw ServException("Setting Internet option error: ", GetLastError());
-//	}
-//
-//	std::thread WaitingForResponse([&]() {
-//		WaitResponseFromServer();
-//	});
-//	WaitingForResponse.detach();
-//	
-//	HANDLE eventArr[2] = { *serviceStopEvent, serverSendResponse };
-//	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 5000);
-//	if (eventResult == WAIT_FAILED) {
-//		CloseHandle(serverSendResponse);
-//		throw ServException("Error while waiting for events: ", GetLastError());
-//	}
-//
-//	if (eventResult == WAIT_TIMEOUT) {
-//		CloseHandle(serverSendResponse);
-//		throw ServException("Response timeout expired: ");
-//	}
-//	
-//	if (eventResult == WAIT_OBJECT_0) {
-//		CloseHandle(serverSendResponse);
-//		throw ServException("Service stopped by SCM: ");
-//	}
-//
-//	if (eventResult == WAIT_OBJECT_0 + 1) {
-//		if (SendResponseStatus == FALSE) {
-//			throw ServException("Sending request to server error: ", GetLastError());
-//		}
-//
-//		if (ResponseStatus == FALSE) {
-//			throw ServException("Request response error: ", GetLastError());
-//		}
-//
-//		WebSocketHandle = WinHttpWebSocketCompleteUpgrade(RequestHandle, NULL);
-//		if (WebSocketHandle == NULL) {
-//			throw ServException("Handshake completion error: ", GetLastError());
-//		}
-//
-//		writeLog("Connection to Web Socket server successful");
-//	}
-//}
-//
+void WebSocketServer::Initialization()
+{
+	SessionHandle = WinHttpOpen(L"ProxyConnection", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+	if (SessionHandle == NULL) {
+		throw ServException("WinHTTP initialization error: ", GetLastError());
+	}
+}
+
+void WebSocketServer::WaitResponseFromServer()
+{
+	SendResponseStatus = WinHttpSendRequest(RequestHandle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0);
+	ReceiveResponseStatus = WinHttpReceiveResponse(RequestHandle, NULL);
+	SetEvent(serverSendResponse);
+}
+
+void WebSocketServer::Connection() 
+{
+	eventsCreation();
+
+	serverSendResponse = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (serverSendResponse == NULL) {
+		throw ServException("Create Event Error: ", GetLastError());
+	}
+
+	ConnectionHandle = WinHttpConnect(SessionHandle, serverIP, serverPort, 0);
+	if (ConnectionHandle == NULL) {
+		throw ServException("Target server initialization error: ", GetLastError());
+	}
+
+	RequestHandle = WinHttpOpenRequest(ConnectionHandle, L"GET", NULL, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+	if (RequestHandle == NULL) {
+		throw ServException("HTTP request creation error: ", GetLastError());
+	}
+
+#pragma warning(suppress : 6387)
+	if (WinHttpSetOption(RequestHandle, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, NULL, 0) == FALSE) {
+		throw ServException("Setting Internet option error: ", GetLastError());
+	}
+
+	std::thread WaitingForResponse([&]() {
+		WaitResponseFromServer();
+	});
+	WaitingForResponse.detach();
+	
+	HANDLE eventArr[2] = { *stopEvent, serverSendResponse };
+	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 30000);
+	if (eventResult == WAIT_FAILED) {
+		CloseHandle(serverSendResponse);
+		throw ServException("Error while waiting for events: ", GetLastError());
+	}
+
+	if (eventResult == WAIT_TIMEOUT) {
+		CloseHandle(serverSendResponse);
+		throw ServException("Response timeout expired: ");
+	}
+	
+	if (eventResult == WAIT_OBJECT_0) {
+		CloseHandle(serverSendResponse);
+		throw ServException("Service stopped by SCM: ");
+	}
+
+	if (eventResult == WAIT_OBJECT_0 + 1) {
+		if (SendResponseStatus == FALSE) {
+			throw ServException("Sending request to server error: ", GetLastError());
+		}
+
+		if (ReceiveResponseStatus == FALSE) {
+			throw ServException("Request response error: ", GetLastError());
+		}
+
+		WebSocketHandle = WinHttpWebSocketCompleteUpgrade(RequestHandle, NULL);
+		if (WebSocketHandle == NULL) {
+			throw ServException("Handshake completion error: ", GetLastError());
+		}
+
+		writeLog("Connection to Web Socket server successful");
+	}
+}
+
 //void WebSocketConnection::sockCommunication()
 //{
 //
@@ -696,25 +552,9 @@ void TCPTargetServer::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 //
 //}
 
-//void WebSocketConnection::stopServer()
-//{
-//	if (SessionHandle != NULL) {
-//		WinHttpCloseHandle(SessionHandle);
-//	}
-//	if (ConnectionHandle != NULL) {
-//		WinHttpCloseHandle(ConnectionHandle);
-//	}
-//	if (RequestHandle != NULL) {
-//		WinHttpCloseHandle(RequestHandle);
-//	}
-//	if (WebSocketHandle != NULL) {
-//		WinHttpCloseHandle(WebSocketHandle);
-//	}
-//}
-
 // Proxy server connection function
 
-void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent) {
+void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE* stopEvent) {
 
 	client.stopEvent = stopEvent;
 	targetServer.stopEvent = stopEvent;
@@ -728,8 +568,8 @@ void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* sto
 
 			try
 			{
-				client.WaitingForClients();
-				targetServer.connectToTargetServer();
+				client.Connection();
+				targetServer.Connection();
 
 				//threads client a server handlers
 				std::thread cH([&]() {
