@@ -6,18 +6,14 @@
 
 #define BUFFER_SIZE 1024
 
-// nazvy naopak
-class ProxyServer {
-	friend void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
+class ProxyConnection {
+	friend void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE* stopEvent);
 
 public:
-	ProxyServer();
-	virtual ~ProxyServer() = 0;
-// jedna spolecna funkce
+	ProxyConnection();
+	virtual ~ProxyConnection() = 0;
 	virtual void Initialization() = 0;
-	virtual void WaitingForClients() = 0;
-//
-	virtual void connectToTargetServer() = 0;
+	virtual void Connection() = 0;
 	virtual void Handler() = 0;
 	virtual int sendData(const char* pData, int length) = 0;
 	virtual void receiveData() = 0;
@@ -36,21 +32,18 @@ protected:
 	HANDLE dataToSend;
 };
 
-class TCPClient: public ProxyServer
+class TCPClient: public ProxyConnection
 {
 public:
 	TCPClient(const char* listeningPort); // Constructor
 	~TCPClient();
 	void Initialization() override;
-	void WaitingForClients() override;
+	void Connection() override;
 	void Handler() override;
 	int sendData(const char* pData, int length) override;
 	void receiveData() override;
 	void closeConnection() override;
 private:
-	//Prohibited method
-	void connectToTargetServer() override {}
-	//
 	void initSockets(); // Function initiates use of the Winsock DLL
 	void bindSocket(); // Function associates a local address with a socket
 	void listenState(); // Set socket to listen state
@@ -69,20 +62,17 @@ private:
 	int errState;
 };
 
-class TCPTargetServer : public ProxyServer {
+class TCPTargetServer : public ProxyConnection {
 public:
 	TCPTargetServer(const char* serverIP, const char* serverPort);
 	~TCPTargetServer();
 	void Initialization() override {}
-	void connectToTargetServer() override;
+	void Connection() override;
 	void Handler() override;
 	int sendData(const char* pData, int length) override;
 	void receiveData() override;
 	void closeConnection() override;
 private:
-	//Prohibited methods
-	virtual void WaitingForClients() override {}
-	//
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
 	void createNewSocket(SOCKET& new_socket, addrinfo* sockInfo); // Create socket with addrinfo parameters
 	TCPTargetServer(const TCPTargetServer&) = delete; // Copy not allowed
@@ -96,29 +86,29 @@ private:
 	int errState;
 };
 
-//class WebSocketConnection : public StartServer {
-//public:
-//	WebSocketConnection(const char* listeningPort, LPCWSTR serverIP, INTERNET_PORT serverPort);
-//	~WebSocketConnection();
-//	void serverInitialization() override;
-//	void serverHandler() override;
-//private:
-//	void WaitResponseFromServer();
-//	void connectToServer();
-//	void sockCommunication();
-//	void createSocketEvents();
-//	void stopServer();
-//private:
-//	bool SendResponseStatus;
-//	bool ResponseStatus;
-//	HANDLE serverSendResponse;
-//	HINTERNET SessionHandle;
-//	HINTERNET ConnectionHandle;
-//	HINTERNET RequestHandle;
-//	HINTERNET WebSocketHandle;
-//	LPCWSTR serverIP;
-//	INTERNET_PORT serverPort;
-//};
+class WebSocketServer : public ProxyConnection {
+public:
+	WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort);
+	~WebSocketServer();
+	void Initialization() override;
+	void Connection() override;
+	void Handler() override;
+	int sendData(const char* pData, int length) override;
+	void receiveData() override;
+	void closeConnection() override;
+private:
+	void WaitResponseFromServer();
+private:
+	bool SendResponseStatus;
+	bool ReceiveResponseStatus;
+	HANDLE serverSendResponse;
+	HINTERNET SessionHandle;
+	HINTERNET ConnectionHandle;
+	HINTERNET RequestHandle;
+	HINTERNET WebSocketHandle;
+	LPCWSTR serverIP;
+	INTERNET_PORT serverPort;
+};
 
-void proxyConnection(ProxyServer& client, ProxyServer& targetServer, HANDLE* stopEvent);
+void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE* stopEvent);
 
