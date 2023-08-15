@@ -6,7 +6,8 @@ ProxyConnection::ProxyConnection() :
 	readySend(NULL),
 	dataToSend(NULL),
 	dataInReceiveBuffer(0),
-	indexForRecData(0)
+	indexForRecData(0),
+	readyRecv(false)
 {
 	ZeroMemory(&receiveBuffer, sizeof(receiveBuffer));
 }
