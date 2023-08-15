@@ -76,22 +76,24 @@ void TCPClient::Connection()
 
 void TCPClient::Handler()
 {
-	WSANETWORKEVENTS clientEvents;
+	WSANETWORKEVENTS targetServerEvents;
 
-	clientReadySend = WSACreateEvent();
-	if (clientReadySend == WSA_INVALID_EVENT) {
+	targetServerReadySend = WSACreateEvent();
+	if (targetServerReadySend == WSA_INVALID_EVENT) {
 		writeLog("Create WSA Event failed: ", WSAGetLastError());
 		SetEvent(disconnect);
 		return;
 	}
 
-	if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
+	if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
 		writeLog("WSAEventSelect function failed: ", WSAGetLastError());
 		SetEvent(disconnect);
 		return;
 	}
 
-	HANDLE eventArr[3] = { *stopEvent, disconnect, clientReadySend };
+	readyRecv = true;
+
+	HANDLE eventArr[3] = { *stopEvent, disconnect, targetServerReadySend };
 	while (true) {
 
 		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
@@ -105,21 +107,30 @@ void TCPClient::Handler()
 			return;
 		}
 
-		errState = WSAEnumNetworkEvents(client_socket, clientReadySend, &clientEvents);
+		errState = WSAEnumNetworkEvents(server_socket, targetServerReadySend, &targetServerEvents);
 		if (errState == SOCKET_ERROR) {
-			writeLog("Client: Error while getting information about events: ", WSAGetLastError());
+			writeLog("Server: Error while getting information about events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
 
-		if (clientEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
-			writeLog("Connection with the client has been severed: ", WSAGetLastError());
+		if (targetServerEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
+			writeLog("Connection with the target server has been severed: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
 
-		if (clientEvents.lNetworkEvents & FD_READ) {
+		if (targetServerEvents.lNetworkEvents & FD_READ) {
 			SetEvent(readySend);
+		}
+
+		if (targetServerEvents.lNetworkEvents & FD_WRITE) {
+			readyRecv = true;
+			if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
+				writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+				SetEvent(disconnect);
+				return;
+			}
 		}
 
 	}
@@ -131,12 +142,20 @@ int TCPClient::sendData(const char* pData, int length)
 		return 0;
 	}
 
-	int send_data = send(client_socket, pData, length, 0);
+	int send_data = send(server_socket, pData, length, 0);
 	if (send_data == SOCKET_ERROR) {
 		if (WSAGetLastError() != WSAEWOULDBLOCK) {
 			closeConnection();
-			throw ServException("Connection with the client has been severed: ", WSAGetLastError());
+			throw ServException("Connection with the server has been severed: ", WSAGetLastError());
 		}
+
+		readyRecv = false;
+
+		if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
+			closeConnection();
+			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+		}
+
 		send_data = 0;
 	}
 	return send_data;
