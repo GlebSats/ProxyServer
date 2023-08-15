@@ -33,6 +33,7 @@ protected:
 	char receiveBuffer[BUFFER_SIZE];
 	int dataInReceiveBuffer;
 	int indexForRecData;
+	bool readyRecv;
 	HANDLE disconnect;
 	HANDLE readySend;
 	HANDLE dataToSend;
