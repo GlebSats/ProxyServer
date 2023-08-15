@@ -51,6 +51,8 @@ void TCPTargetServer::Handler()
 		return;
 	}
 
+	readyRecv = true;
+
 	HANDLE eventArr[3] = { *stopEvent, disconnect, targetServerReadySend };
 	while (true) {
 
@@ -82,6 +84,15 @@ void TCPTargetServer::Handler()
 			SetEvent(readySend);
 		}
 
+		if (targetServerEvents.lNetworkEvents & FD_WRITE) {
+			readyRecv = true;
+			if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
+				writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+				SetEvent(disconnect);
+				return;
+			}
+		}
+
 	}
 }
 
@@ -97,6 +108,14 @@ int TCPTargetServer::sendData(const char* pData, int length)
 			closeConnection();
 			throw ServException("Connection with the server has been severed: ", WSAGetLastError());
 		}
+
+		readyRecv = false;
+
+		if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
+			closeConnection();
+			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+		}
+
 		send_data = 0;
 	}
 	return send_data;
