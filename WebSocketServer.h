@@ -11,12 +11,18 @@ public:
 	void Initialization() override;
 	void Connection() override;
 	void Handler() override;
-	int sendData(const char* pData, int length) override;
+	/*int sendData(const char* pData, int length) override;
 	void receiveData() override;
-	void closeConnection() override;
+	void closeConnection() override;*/
+	int sendData(const char* pData, int length) override { return 0; }
+	void receiveData() override {}
+	void closeConnection() override {}
 private:
 	void WaitResponseFromServer();
 private:
+	char tempReceiveBuffer[BUFFER_SIZE];
+	DWORD receiveBytes;
+	WINHTTP_WEB_SOCKET_BUFFER_TYPE tempBufferType;
 	bool SendResponseStatus;
 	bool ReceiveResponseStatus;
 	HANDLE serverSendResponse;
@@ -26,6 +32,6 @@ private:
 	HINTERNET WebSocketHandle;
 	LPCWSTR serverIP;
 	INTERNET_PORT serverPort;
+	int errState;
 };
 #endif
-
