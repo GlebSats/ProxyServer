@@ -1,6 +1,6 @@
 #include "WebSocketServer.h"
 
-WebSocketServer::WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort):
+WebSocketServer::WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort) :
 	serverIP(serverIP),
 	serverPort(serverPort),
 	SendResponseStatus(FALSE),
@@ -45,7 +45,7 @@ void WebSocketServer::WaitResponseFromServer()
 	SetEvent(serverSendResponse);
 }
 
-void WebSocketServer::Connection() 
+void WebSocketServer::Connection()
 {
 	eventsCreation();
 
@@ -71,9 +71,9 @@ void WebSocketServer::Connection()
 
 	std::thread WaitingForResponse([&]() {
 		WaitResponseFromServer();
-	});
+		});
 	WaitingForResponse.detach();
-	
+
 	HANDLE eventArr[2] = { *stopEvent, serverSendResponse };
 	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 30000);
 	if (eventResult == WAIT_FAILED) {
@@ -85,7 +85,7 @@ void WebSocketServer::Connection()
 		CloseHandle(serverSendResponse);
 		throw ServException("Response timeout expired: ");
 	}
-	
+
 	if (eventResult == WAIT_OBJECT_0) {
 		CloseHandle(serverSendResponse);
 		throw ServException("Service stopped by SCM: ");
@@ -106,6 +106,26 @@ void WebSocketServer::Connection()
 		}
 
 		writeLog("Connection to Web Socket server successful");
+	}
+}
+
+void WebSocketServer::Handler()
+{
+	if (dataInReceiveBuffer == 0) {
+		errState = WinHttpWebSocketReceive(WebSocketHandle, tempReceiveBuffer, BUFFER_SIZE, &receiveBytes, &tempBufferType);
+		if (errState != NO_ERROR) {
+			writeLog("Web Socket Receive Error : ", errState);
+			SetEvent(disconnect);
+			return;
+		}
+
+		if (tempBufferType == WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE) {
+			writeLog("Connection with the server has been severed: ", GetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		SetEvent(readySend);
 	}
 }
 
