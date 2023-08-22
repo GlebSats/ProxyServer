@@ -156,6 +156,33 @@ void WebSocketServer::receiveData()
 	}
 }
 
+void WebSocketServer::closeConnection()
+{
+	errState = WinHttpWebSocketClose(WebSocketHandle, WINHTTP_WEB_SOCKET_EMPTY_CLOSE_STATUS, NULL, 0);
+	if (errState != NO_ERROR) {
+		throw ServException("Web Socket close error: ", errState);
+	}
+
+	if (WebSocketHandle != NULL) {
+		WinHttpCloseHandle(WebSocketHandle);
+	}
+
+	if (RequestHandle != NULL) {
+		WinHttpCloseHandle(RequestHandle);
+	}
+
+	if (ConnectionHandle != NULL) {
+		WinHttpCloseHandle(ConnectionHandle);
+	}
+
+	if (SessionHandle != NULL) {
+		WinHttpCloseHandle(SessionHandle);
+	}
+
+	if (serverSendResponse != NULL) {
+		CloseHandle(serverSendResponse);
+	}
+}
 //void WebSocketConnection::sockCommunication()
 //{
 //
