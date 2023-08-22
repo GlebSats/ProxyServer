@@ -143,7 +143,12 @@ int WebSocketServer::sendData(const char* pData, int length)
 	}
 	else {
 		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
+		if (errState != NO_ERROR) {
+			throw ServException("Connection with the server has been severed: ", errState);
+		}
 	}
+
+	return length;
 }
 
 void WebSocketServer::receiveData()
