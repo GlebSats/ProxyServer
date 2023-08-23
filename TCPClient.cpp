@@ -143,7 +143,7 @@ int TCPClient::sendData(const char* pData, int length)
 			closeConnection();
 			throw ServException("Connection with the client has been severed: ", WSAGetLastError());
 		}
-		
+
 		if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
 			closeConnection();
 			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
@@ -171,7 +171,7 @@ void TCPClient::receiveData()
 }
 
 void TCPClient::closeConnection()
-{
+{//изменить с проверкой на существование
 	WSACloseEvent(clientConnectionRequest);
 	shutdown(client_socket, SD_BOTH);
 	closesocket(client_socket);
