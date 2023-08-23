@@ -190,40 +190,4 @@ void WebSocketServer::closeConnection()
 	
 	eventsDeleting();
 }
-//void WebSocketConnection::sockCommunication()
-//{
-//
-//}
 
-//void WebSocketConnection::createSocketEvents()
-//{
-//	bufToClientHasData = WSACreateEvent();
-//	if (bufToClientHasData == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	bufToServHasData = WSACreateEvent();
-//	if (bufToServHasData == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	clientReadySend = WSACreateEvent();
-//	if (clientReadySend == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	serverReadySend = WSACreateEvent();
-//	if (serverReadySend == WSA_INVALID_EVENT) {
-//		closeConnection();
-//		throw ServException("Create WSA Event failed: ", WSAGetLastError());
-//	}
-//
-//	if (WSAEventSelect(client_socket, clientReadySend, FD_ACCEPT | FD_READ | FD_CLOSE) != 0) {
-//		closeConnection();
-//		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
-//	}
-//
-//}
