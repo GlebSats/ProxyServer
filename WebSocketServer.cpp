@@ -187,6 +187,8 @@ void WebSocketServer::closeConnection()
 	if (serverSendResponse != NULL) {
 		CloseHandle(serverSendResponse);
 	}
+	
+	eventsDeleting();
 }
 //void WebSocketConnection::sockCommunication()
 //{
