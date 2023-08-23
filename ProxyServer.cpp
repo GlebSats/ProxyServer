@@ -47,37 +47,37 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 						break;
 					}
 
-					if (WaitForSingleObject(eventArr[1], 0) == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0 + 1) {
 						SetEvent(targetServer.disconnect);
 						client.closeConnection();
 						targetServer.closeConnection();
 						break;
 					}
 
-					if (WaitForSingleObject(eventArr[2], 0) == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0 + 2) {
 						SetEvent(client.disconnect);
 						targetServer.closeConnection();
 						client.closeConnection();
 						break;
 					}
 
-					if (WaitForSingleObject(eventArr[3], 0) == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0 + 3) {
 						client.receiveData();
 						ResetEvent(client.readySend);
 					}
 
-					if (WaitForSingleObject(eventArr[4], 0) == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0 + 4) {
 						int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
 						client.dataInReceiveBuffer -= send_data;
 						client.indexForRecData += send_data;
 					}
 
-					if (WaitForSingleObject(eventArr[5], 0) == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0 + 5) {
 						targetServer.receiveData();
 						ResetEvent(targetServer.readySend);
 					}
 
-					if (WaitForSingleObject(eventArr[6], 0) == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0 + 6) {
 						int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
 						targetServer.dataInReceiveBuffer -= send_data;
 						targetServer.indexForRecData += send_data;
@@ -101,6 +101,8 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 			catch (const ServException& ex)
 			{
 				writeLog(ex.GetErrorType(), ex.GetErrorCode());
+				client.closeConnection();
+				targetServer.closeConnection();
 			}
 		}
 	}
