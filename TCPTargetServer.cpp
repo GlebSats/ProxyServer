@@ -80,7 +80,7 @@ void TCPTargetServer::Handler()
 			return;
 		}
 
-		if (targetServerEvents.lNetworkEvents & FD_READ) {
+		if (targetServerEvents.lNetworkEvents & FD_READ && (dataInReceiveBuffer == 0)) {
 			SetEvent(readySend);
 		}
 
