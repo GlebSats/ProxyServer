@@ -15,9 +15,6 @@ public:
 	int sendData(const char* pData, int length) override;
 	void receiveData() override;
 	void closeConnection() override;
-	/*int sendData(const char* pData, int length) override { return 0; }
-	void receiveData() override {}
-	void closeConnection() override {}*/
 private:
 	void WaitResponseFromServer();
 private:
