@@ -4,6 +4,7 @@
 #include "ProxyConnection.h"
 #include <winhttp.h>
 #include <cstring>
+#include <thread>
 
 class WebSocketServer : public ProxyConnection {
 public:
