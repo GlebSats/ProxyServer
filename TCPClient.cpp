@@ -120,7 +120,7 @@ void TCPClient::Handler()
 			return;
 		}
 
-		if (clientEvents.lNetworkEvents & FD_READ) {
+		if ((clientEvents.lNetworkEvents & FD_READ) && (dataInReceiveBuffer == 0)) {
 			SetEvent(readySend);
 		}
 
