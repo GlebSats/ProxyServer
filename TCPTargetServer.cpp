@@ -137,7 +137,7 @@ void TCPTargetServer::receiveData()
 }
 
 void TCPTargetServer::closeConnection()
-{
+{ //изменить с проверкой на существование
 	WSACloseEvent(targetServerReadySend);
 	shutdown(server_socket, SD_BOTH);
 	closesocket(server_socket);
