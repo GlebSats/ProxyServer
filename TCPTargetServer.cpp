@@ -85,12 +85,12 @@ void TCPTargetServer::Handler()
 		}
 
 		if (targetServerEvents.lNetworkEvents & FD_WRITE) {
-			readyRecv = true;
 			if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
 				writeLog("WSAEventSelect function failed: ", WSAGetLastError());
 				SetEvent(disconnect);
 				return;
 			}
+			readyRecv = true;
 		}
 
 	}
@@ -105,14 +105,12 @@ int TCPTargetServer::sendData(const char* pData, int length)
 	int send_data = send(server_socket, pData, length, 0);
 	if (send_data == SOCKET_ERROR) {
 		if (WSAGetLastError() != WSAEWOULDBLOCK) {
-			closeConnection();
 			throw ServException("Connection with the server has been severed: ", WSAGetLastError());
 		}
 
 		readyRecv = false;
 
 		if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
-			closeConnection();
 			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
 		}
 
@@ -129,18 +127,24 @@ void TCPTargetServer::receiveData()
 
 	int rec_data = recv(server_socket, receiveBuffer, BUFFER_SIZE, 0);
 	if (rec_data == SOCKET_ERROR) {
-		closeConnection();
 		throw ServException("Connection with the server has been severed: ", WSAGetLastError());
 	}
 	dataInReceiveBuffer = rec_data;
 	indexForRecData = 0;
+	ResetEvent(readySend);
 }
 
 void TCPTargetServer::closeConnection()
-{ //изменить с проверкой на существование
-	WSACloseEvent(targetServerReadySend);
-	shutdown(server_socket, SD_BOTH);
-	closesocket(server_socket);
+{ 
+	if (targetServerReadySend != WSA_INVALID_EVENT) {
+		WSACloseEvent(targetServerReadySend);
+	}
+
+	if (server_socket != INVALID_SOCKET) {
+		shutdown(server_socket, SD_BOTH);
+		closesocket(server_socket);
+	}
+
 	eventsDeleting();
 }
 
