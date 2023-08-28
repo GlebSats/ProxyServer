@@ -30,7 +30,7 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 
 				while (true)
 				{
-					HANDLE eventArr[7] = { *stopEvent, client.disconnect, targetServer.disconnect, client.readySend, client.dataToSend, targetServer.readySend, targetServer.dataToSend };
+					HANDLE eventArr[7] = { *stopEvent, client.disconnect, targetServer.disconnect, client.dataToSend, targetServer.dataToSend, client.readySend, targetServer.readySend  };
 					int eventResult = WaitForMultipleObjects(7, eventArr, FALSE, INFINITE);
 
 					if (eventResult == WAIT_FAILED) {
@@ -62,35 +62,33 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 3) {
-						client.receiveData();
-						ResetEvent(client.readySend);
-					}
-
-					if (eventResult == WAIT_OBJECT_0 + 4) {
 						int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
 						client.dataInReceiveBuffer -= send_data;
 						client.indexForRecData += send_data;
 					}
 
-					if (eventResult == WAIT_OBJECT_0 + 5) {
-						targetServer.receiveData();
-						ResetEvent(targetServer.readySend);
-					}
-
-					if (eventResult == WAIT_OBJECT_0 + 6) {
+					if (eventResult == WAIT_OBJECT_0 + 4) {
 						int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
 						targetServer.dataInReceiveBuffer -= send_data;
 						targetServer.indexForRecData += send_data;
 					}
 
-					if (client.dataInReceiveBuffer != 0) {
+					if (eventResult == WAIT_OBJECT_0 + 5) {
+						client.receiveData();
+					}
+
+					if (eventResult == WAIT_OBJECT_0 + 6) {
+						targetServer.receiveData();
+					}
+
+					if ((client.dataInReceiveBuffer != 0) && targetServer.readyRecv) { //ready receive true false
 						SetEvent(client.dataToSend);
 					}
 					else {
 						ResetEvent(client.dataToSend);
 					}
 
-					if (targetServer.dataInReceiveBuffer != 0) {
+					if (targetServer.dataInReceiveBuffer != 0 && client.readyRecv) { //ready receive true false
 						SetEvent(targetServer.dataToSend);
 					}
 					else {
