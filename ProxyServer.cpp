@@ -88,7 +88,7 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 						ResetEvent(client.dataToSend);
 					}
 
-					if (targetServer.dataInReceiveBuffer != 0 && client.readyRecv) { //ready receive true false
+					if ((targetServer.dataInReceiveBuffer != 0) && client.readyRecv) { //ready receive true false
 						SetEvent(targetServer.dataToSend);
 					}
 					else {
