@@ -25,6 +25,7 @@ private:
 	bool SendResponseStatus;
 	bool ReceiveResponseStatus;
 	HANDLE serverSendResponse;
+	HANDLE tempBufferEmpty;
 	HINTERNET SessionHandle;
 	HINTERNET ConnectionHandle;
 	HINTERNET RequestHandle;
