@@ -125,9 +125,13 @@ void TCPClient::Handler()
 		}
 
 		if (clientEvents.lNetworkEvents & FD_WRITE) {
+			if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
+				writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+				SetEvent(disconnect);
+				return;
+			}
 			readyRecv = true;
 		}
-
 	}
 }
 
@@ -140,17 +144,16 @@ int TCPClient::sendData(const char* pData, int length)
 	int send_data = send(client_socket, pData, length, 0);
 	if (send_data == SOCKET_ERROR) {
 		if (WSAGetLastError() != WSAEWOULDBLOCK) {
-			closeConnection();
 			throw ServException("Connection with the client has been severed: ", WSAGetLastError());
 		}
 
+		readyRecv = false;
+
 		if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
-			closeConnection();
 			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
 		}
 
 		send_data = 0;
-		readyRecv = false;
 	}
 	return send_data;
 }
@@ -163,18 +166,24 @@ void TCPClient::receiveData()
 
 	int rec_data = recv(client_socket, receiveBuffer, BUFFER_SIZE, 0);
 	if (rec_data == SOCKET_ERROR) {
-		closeConnection();
 		throw ServException("Connection with the client has been severed: ", WSAGetLastError());
 	}
 	dataInReceiveBuffer = rec_data;
 	indexForRecData = 0;
+	ResetEvent(readySend);
 }
 
 void TCPClient::closeConnection()
-{//изменить с проверкой на существование
-	WSACloseEvent(clientConnectionRequest);
-	shutdown(client_socket, SD_BOTH);
-	closesocket(client_socket);
+{
+	if (clientConnectionRequest != WSA_INVALID_EVENT) {
+		WSACloseEvent(clientConnectionRequest);
+	}
+
+	if (client_socket != INVALID_SOCKET) {
+		shutdown(client_socket, SD_BOTH);
+		closesocket(client_socket);
+	}
+
 	eventsDeleting();
 }
 
