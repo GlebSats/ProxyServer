@@ -1,15 +1,18 @@
 #include "WebSocketServer.h"
 
 WebSocketServer::WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort) :
+	dataInTempBuffer(0),
 	serverIP(serverIP),
 	serverPort(serverPort),
 	SendResponseStatus(FALSE),
 	ReceiveResponseStatus(FALSE),
 	serverSendResponse(NULL),
+	tempBufferEmpty(NULL),
 	SessionHandle(NULL),
 	ConnectionHandle(NULL),
 	RequestHandle(NULL),
-	WebSocketHandle(NULL)
+	WebSocketHandle(NULL),
+	errState(0)
 {
 }
 
@@ -27,7 +30,12 @@ WebSocketServer::~WebSocketServer()
 	if (WebSocketHandle != NULL) {
 		WinHttpCloseHandle(WebSocketHandle);
 	}
-	CloseHandle(serverSendResponse);
+	if (serverSendResponse != NULL) {
+		CloseHandle(serverSendResponse);
+	}
+	if (tempBufferEmpty != NULL) {
+		CloseHandle(tempBufferEmpty);
+	}
 }
 
 void WebSocketServer::Initialization()
@@ -111,7 +119,26 @@ void WebSocketServer::Connection()
 
 void WebSocketServer::Handler()
 {
-	if (dataInTempBuffer == 0) {
+	tempBufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
+	if (tempBufferEmpty == NULL) {
+		throw ServException("Create Event Error: ", GetLastError());
+	}
+
+	HANDLE eventArr[3] = { *stopEvent, disconnect, tempBufferEmpty };
+
+	while (true) {
+		int eventResult = WaitForMultipleObjects(3, eventArr, FALSE, INFINITE);
+
+		if (eventResult == WAIT_FAILED) {
+			writeLog("Error while waiting for events: ",GetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if ((eventResult == WAIT_OBJECT_0) || (eventResult == WAIT_OBJECT_0 + 1)) {
+			return;
+		}
+
 		errState = WinHttpWebSocketReceive(WebSocketHandle, tempReceiveBuffer, BUFFER_SIZE, &dataInTempBuffer, &tempBufferType);
 		if (errState != NO_ERROR) {
 			writeLog("Web Socket Receive Error : ", errState);
@@ -126,6 +153,7 @@ void WebSocketServer::Handler()
 		}
 
 		SetEvent(readySend);
+		ResetEvent(tempBufferEmpty);
 	}
 }
 
@@ -158,17 +186,15 @@ void WebSocketServer::receiveData()
 		dataInReceiveBuffer = dataInTempBuffer;
 		indexForRecData = 0;
 		dataInTempBuffer = 0;
+		SetEvent(tempBufferEmpty);
+		ResetEvent(readySend);
 	}
 }
 
 void WebSocketServer::closeConnection()
 {
-	errState = WinHttpWebSocketClose(WebSocketHandle, WINHTTP_WEB_SOCKET_EMPTY_CLOSE_STATUS, NULL, 0);
-	if (errState != NO_ERROR) {
-		throw ServException("Web Socket close error: ", errState);
-	}
-
 	if (WebSocketHandle != NULL) {
+		WinHttpWebSocketClose(WebSocketHandle, WINHTTP_WEB_SOCKET_EMPTY_CLOSE_STATUS, NULL, 0);
 		WinHttpCloseHandle(WebSocketHandle);
 	}
 
@@ -187,7 +213,11 @@ void WebSocketServer::closeConnection()
 	if (serverSendResponse != NULL) {
 		CloseHandle(serverSendResponse);
 	}
-	
+
+	if (tempBufferEmpty != NULL) {
+		CloseHandle(tempBufferEmpty);
+	}
+
 	eventsDeleting();
 }
 
