@@ -33,29 +33,50 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					HANDLE eventArr[7] = { *stopEvent, client.disconnect, targetServer.disconnect, client.dataToSend, targetServer.dataToSend, client.readySend, targetServer.readySend  };
 					int eventResult = WaitForMultipleObjects(7, eventArr, FALSE, INFINITE);
 
-					if (eventResult == WAIT_FAILED) {
+					if (eventResult == WAIT_FAILED) { 
 						client.closeConnection();
 						targetServer.closeConnection();
 						writeLog("Error while waiting for events: ", GetLastError());
 						break;
 					}
 
-					if (eventResult == WAIT_OBJECT_0) {
+					if (eventResult == WAIT_OBJECT_0) { 
+						SetEvent(client.disconnect);
+						SetEvent(targetServer.disconnect);
+
+						if ((client.dataInReceiveBuffer != 0) && targetServer.readyRecv) {
+							int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
+						}
+
+						if ((targetServer.dataInReceiveBuffer != 0) && client.readyRecv) {
+							int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
+						}
+
 						client.closeConnection();
 						targetServer.closeConnection();
 						writeLog("Connection has been severed: ", GetLastError());
 						break;
 					}
 
-					if (eventResult == WAIT_OBJECT_0 + 1) {
+					if (eventResult == WAIT_OBJECT_0 + 1) { 
 						SetEvent(targetServer.disconnect);
+
+						if ((client.dataInReceiveBuffer != 0) && targetServer.readyRecv) {
+							int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
+						}
+
 						client.closeConnection();
 						targetServer.closeConnection();
 						break;
 					}
 
-					if (eventResult == WAIT_OBJECT_0 + 2) {
+					if (eventResult == WAIT_OBJECT_0 + 2) { 
 						SetEvent(client.disconnect);
+
+						if ((targetServer.dataInReceiveBuffer != 0) && client.readyRecv) {
+							int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
+						}
+
 						targetServer.closeConnection();
 						client.closeConnection();
 						break;
