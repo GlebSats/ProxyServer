@@ -37,11 +37,14 @@ void ProxyConnection::eventsDeleting()
 {
 	if (dataToSend != NULL) {
 		CloseHandle(dataToSend);
+		dataToSend = NULL;
 	}
 	if (readySend != NULL) {
 		CloseHandle(readySend);
+		readySend = NULL;
 	}
 	if (disconnect != NULL) {
 		CloseHandle(disconnect);
+		disconnect = NULL;
 	}
 }
