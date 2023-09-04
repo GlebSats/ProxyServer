@@ -21,9 +21,11 @@ public:
 	virtual void Initialization() = 0;
 	virtual void Connection() = 0;
 	virtual void Handler() = 0;
-	virtual int sendData(const char* pData, int length) = 0;
+	virtual int sendData(const char* pData, const int length) = 0;
 	virtual void receiveData() = 0;
 	virtual void closeConnection() = 0;
+	void subtractData(const int send_data);
+	int WaitingToSend();
 protected:
 	void eventsCreation();
 	void eventsDeleting();
@@ -33,9 +35,9 @@ protected:
 	char receiveBuffer[BUFFER_SIZE];
 	int dataInReceiveBuffer;
 	int indexForRecData;
-	bool readyRecv;
 	HANDLE disconnect;
 	HANDLE readySend;
+	HANDLE readyReceive;
 	HANDLE dataToSend;
 };
 
