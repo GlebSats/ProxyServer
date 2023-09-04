@@ -91,8 +91,6 @@ void TCPClient::Handler()
 		return;
 	}
 
-	readyRecv = true;
-
 	HANDLE eventArr[3] = { *stopEvent, disconnect, clientReadySend };
 	while (true) {
 
@@ -130,24 +128,18 @@ void TCPClient::Handler()
 				SetEvent(disconnect);
 				return;
 			}
-			readyRecv = true;
+			SetEvent(readyReceive);
 		}
 	}
 }
 
-int TCPClient::sendData(const char* pData, int length)
+int TCPClient::sendData(const char* pData, const int length)
 {
-	if (length == 0) {
-		return 0;
-	}
-
 	int send_data = send(client_socket, pData, length, 0);
 	if (send_data == SOCKET_ERROR) {
 		if (WSAGetLastError() != WSAEWOULDBLOCK) {
 			throw ServException("Connection with the client has been severed: ", WSAGetLastError());
 		}
-
-		readyRecv = false;
 
 		if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
 			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
@@ -170,11 +162,17 @@ void TCPClient::receiveData()
 	}
 	dataInReceiveBuffer = rec_data;
 	indexForRecData = 0;
-	ResetEvent(readySend);
+
+	if (dataInReceiveBuffer != 0) {
+		SetEvent(dataToSend);
+		ResetEvent(readySend);
+	}
 }
 
 void TCPClient::closeConnection()
 {
+	SetEvent(disconnect);
+
 	if (clientConnectionRequest != WSA_INVALID_EVENT) {
 		WSACloseEvent(clientConnectionRequest);
 	}
