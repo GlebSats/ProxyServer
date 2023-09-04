@@ -13,11 +13,12 @@ public:
 	void Initialization() override;
 	void Connection() override;
 	void Handler() override;
-	int sendData(const char* pData, int length) override;
+	int sendData(const char* pData, const int length) override;
 	void receiveData() override;
 	void closeConnection() override;
 private:
 	void WaitResponseFromServer();
+	void trySendData(const char* pData, const int length);
 private:
 	char tempReceiveBuffer[BUFFER_SIZE];
 	DWORD dataInTempBuffer;
@@ -33,5 +34,6 @@ private:
 	LPCWSTR serverIP;
 	INTERNET_PORT serverPort;
 	int errState;
+	int send_data;
 };
 #endif
