@@ -4,7 +4,6 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 
 	client.stopEvent = stopEvent;
 	targetServer.stopEvent = stopEvent;
-
 	try
 	{
 		client.Initialization();
@@ -41,14 +40,11 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					}
 
 					if (eventResult == WAIT_OBJECT_0) { 
-						SetEvent(client.disconnect);
-						SetEvent(targetServer.disconnect);
-
-						if ((client.dataInReceiveBuffer != 0) && targetServer.readyRecv) {
+						if ((client.dataInReceiveBuffer != 0) /*&& targetServer.readyRecv*/) {
 							int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
 						}
 
-						if ((targetServer.dataInReceiveBuffer != 0) && client.readyRecv) {
+						if ((targetServer.dataInReceiveBuffer != 0) /*&& client.readyRecv*/) {
 							int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
 						}
 
@@ -59,9 +55,7 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 1) { 
-						SetEvent(targetServer.disconnect);
-
-						if ((client.dataInReceiveBuffer != 0) && targetServer.readyRecv) {
+						if ((client.dataInReceiveBuffer != 0) /*&& targetServer.readyRecv*/) {
 							int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
 						}
 
@@ -71,9 +65,7 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 2) { 
-						SetEvent(client.disconnect);
-
-						if ((targetServer.dataInReceiveBuffer != 0) && client.readyRecv) {
+						if ((targetServer.dataInReceiveBuffer != 0) /*&& client.readyRecv*/) {
 							int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
 						}
 
@@ -84,14 +76,34 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 
 					if (eventResult == WAIT_OBJECT_0 + 3) {
 						int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
-						client.dataInReceiveBuffer -= send_data;
-						client.indexForRecData += send_data;
+						if (send_data != 0) {
+							client.subtractData(send_data);
+						}
+						else {
+							ResetEvent(client.dataToSend);
+							std::thread CW([&]() {
+								if (targetServer.WaitingToSend() == 0) {
+									SetEvent(client.dataToSend);
+								}
+								});
+							CW.detach();
+						}
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 4) {
 						int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
-						targetServer.dataInReceiveBuffer -= send_data;
-						targetServer.indexForRecData += send_data;
+						if (send_data != 0) {
+							targetServer.subtractData(send_data);
+						}
+						else {
+							ResetEvent(targetServer.dataToSend);
+							std::thread SW([&]() {
+								if (client.WaitingToSend() == 0) {
+									SetEvent(targetServer.dataToSend);
+								}
+								});
+							SW.detach();
+						}
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 5) {
@@ -100,20 +112,6 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 
 					if (eventResult == WAIT_OBJECT_0 + 6) {
 						targetServer.receiveData();
-					}
-
-					if ((client.dataInReceiveBuffer != 0) && targetServer.readyRecv) { //ready receive true false
-						SetEvent(client.dataToSend);
-					}
-					else {
-						ResetEvent(client.dataToSend);
-					}
-
-					if ((targetServer.dataInReceiveBuffer != 0) && client.readyRecv) { //ready receive true false
-						SetEvent(targetServer.dataToSend);
-					}
-					else {
-						ResetEvent(targetServer.dataToSend);
 					}
 				}
 			}
