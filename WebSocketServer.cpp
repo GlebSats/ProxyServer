@@ -12,6 +12,7 @@ WebSocketServer::WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort) :
 	ConnectionHandle(NULL),
 	RequestHandle(NULL),
 	WebSocketHandle(NULL),
+	send_data(0),
 	errState(0)
 {
 }
@@ -51,6 +52,25 @@ void WebSocketServer::WaitResponseFromServer()
 	SendResponseStatus = WinHttpSendRequest(RequestHandle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0);
 	ReceiveResponseStatus = WinHttpReceiveResponse(RequestHandle, NULL);
 	SetEvent(serverSendResponse);
+}
+
+void WebSocketServer::trySendData(const char* pData, const int length)
+{
+	if (length == BUFFER_SIZE) {
+		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE, (PVOID)pData, length);
+		if (errState != NO_ERROR) {
+			throw ServException("Connection with the server has been severed: ", errState);
+		}
+	}
+	else {
+		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
+		if (errState != NO_ERROR) {
+			throw ServException("Connection with the server has been severed: ", errState);
+		}
+	}
+
+	send_data = length;
+	SetEvent(readyReceive);
 }
 
 void WebSocketServer::Connection()
@@ -157,23 +177,27 @@ void WebSocketServer::Handler()
 	}
 }
 
-int WebSocketServer::sendData(const char* pData, int length)
+int WebSocketServer::sendData(const char* pData, const int length) 
 {
-	if (length == 0) {
-		return 0;
+	if (send_data != 0) {
+		send_data = 0;
+		return length;
 	}
 
-	if (length == BUFFER_SIZE) {
-		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE, (PVOID)pData, length);
-		if (errState != NO_ERROR) {
-			throw ServException("Connection with the server has been severed: ", errState);
-		}
+	std::thread SW([&]() {
+			trySendData(pData, length);
+	});
+	SW.detach();
+
+	HANDLE eventArr[1] = { readyReceive };
+	int eventResult = WaitForMultipleObjects(1, eventArr, FALSE, 1000);
+
+	if (eventResult == WAIT_FAILED) {
+		throw ServException("Error while waiting for events: ", GetLastError());
 	}
-	else {
-		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
-		if (errState != NO_ERROR) {
-			throw ServException("Connection with the server has been severed: ", errState);
-		}
+
+	if (eventResult == WAIT_TIMEOUT) {
+		return 0;
 	}
 
 	return length;
@@ -193,6 +217,8 @@ void WebSocketServer::receiveData()
 
 void WebSocketServer::closeConnection()
 {
+	SetEvent(disconnect);
+
 	if (WebSocketHandle != NULL) {
 		WinHttpWebSocketClose(WebSocketHandle, WINHTTP_WEB_SOCKET_EMPTY_CLOSE_STATUS, NULL, 0);
 		WinHttpCloseHandle(WebSocketHandle);
