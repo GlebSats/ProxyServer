@@ -1,6 +1,7 @@
 #include "TCPTargetServer.h"
 
 TCPTargetServer::TCPTargetServer(const char* serverIP, const char* serverPort) :
+	bufferEmpty(NULL),
 	serverIP(serverIP),
 	serverPort(serverPort),
 	serverSockInfo(nullptr),
@@ -38,6 +39,13 @@ void TCPTargetServer::Handler()
 {
 	WSANETWORKEVENTS targetServerEvents;
 
+	bufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
+	if (bufferEmpty == NULL) {
+		writeLog("Create Event Error: ", GetLastError());
+		SetEvent(disconnect);
+		return;
+	}
+
 	targetServerReadySend = WSACreateEvent();
 	if (targetServerReadySend == WSA_INVALID_EVENT) {
 		writeLog("Create WSA Event failed: ", WSAGetLastError());
@@ -52,7 +60,20 @@ void TCPTargetServer::Handler()
 	}
 
 	HANDLE eventArr[3] = { *stopEvent, disconnect, targetServerReadySend };
+	HANDLE eventArr2[3] = { *stopEvent, disconnect, bufferEmpty };
+
 	while (true) {
+
+		int eventResult2 = WaitForMultipleObjects(3, eventArr2, FALSE, INFINITE);
+		if (eventResult2 == WAIT_FAILED) {
+			writeLog("Error while waiting for events: ", GetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if ((eventResult2 == WAIT_OBJECT_0) || (eventResult2 == WAIT_OBJECT_0 + 1)) {
+			return;
+		}
 
 		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
@@ -130,17 +151,38 @@ void TCPTargetServer::receiveData()
 	}
 }
 
+void TCPTargetServer::subtractData(const int send_data)
+{
+	dataInReceiveBuffer -= send_data;
+	indexForRecData += send_data;
+
+	if (dataInReceiveBuffer != 0) {
+		SetEvent(dataToSend);
+	}
+	else {
+		SetEvent(bufferEmpty);
+		ResetEvent(dataToSend);
+	}
+}
+
 void TCPTargetServer::closeConnection()
 { 
 	SetEvent(disconnect);
 
 	if (targetServerReadySend != WSA_INVALID_EVENT) {
 		WSACloseEvent(targetServerReadySend);
+		targetServerReadySend = WSA_INVALID_EVENT;
+	}
+
+	if (bufferEmpty != NULL) {
+		CloseHandle(bufferEmpty);
+		bufferEmpty = NULL;
 	}
 
 	if (server_socket != INVALID_SOCKET) {
 		shutdown(server_socket, SD_BOTH);
 		closesocket(server_socket);
+		server_socket = INVALID_SOCKET;
 	}
 
 	eventsDeleting();
