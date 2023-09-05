@@ -24,7 +24,7 @@ public:
 	virtual int sendData(const char* pData, const int length) = 0;
 	virtual void receiveData() = 0;
 	virtual void closeConnection() = 0;
-	void subtractData(const int send_data);
+	virtual void subtractData(const int send_data);
 	int WaitingToSend();
 protected:
 	void eventsCreation();
