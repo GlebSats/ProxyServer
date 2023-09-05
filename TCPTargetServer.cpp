@@ -148,6 +148,7 @@ void TCPTargetServer::receiveData()
 	if (dataInReceiveBuffer != 0) {
 		SetEvent(dataToSend);
 		ResetEvent(readySend);
+		ResetEvent(bufferEmpty);
 	}
 }
 
