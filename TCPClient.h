@@ -1,6 +1,3 @@
-#ifndef TCPCLIENT_H
-#define TCPCLIENT_H
-
 #include "ProxyConnection.h"
 #include <WinSock2.h>
 #include <WS2tcpip.h>
@@ -13,8 +10,9 @@ public:
 	void Initialization() override;
 	void Connection() override;
 	void Handler() override;
-	int sendData(const char* pData, int length) override;
+	int sendData(const char* pData, const int length) override;
 	void receiveData() override;
+	void subtractData(const int send_data) override;
 	void closeConnection() override;
 private:
 	void initSockets(); // Function initiates use of the Winsock DLL
@@ -25,6 +23,7 @@ private:
 	TCPClient(const TCPClient&) = delete; // Copy not allowed
 	void operator=(const TCPClient&) = delete; // Assignment not allowed
 private:
+	HANDLE bufferEmpty;
 	WSADATA wsData;
 	const char* listeningPort;
 	addrinfo* lisSockInfo;
