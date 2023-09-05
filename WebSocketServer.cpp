@@ -222,28 +222,33 @@ void WebSocketServer::closeConnection()
 	if (WebSocketHandle != NULL) {
 		WinHttpWebSocketClose(WebSocketHandle, WINHTTP_WEB_SOCKET_EMPTY_CLOSE_STATUS, NULL, 0);
 		WinHttpCloseHandle(WebSocketHandle);
+		WebSocketHandle = NULL;
 	}
 
 	if (RequestHandle != NULL) {
 		WinHttpCloseHandle(RequestHandle);
+		RequestHandle = NULL;
 	}
 
 	if (ConnectionHandle != NULL) {
 		WinHttpCloseHandle(ConnectionHandle);
+		ConnectionHandle = NULL;
 	}
 
 	if (SessionHandle != NULL) {
 		WinHttpCloseHandle(SessionHandle);
+		SessionHandle = NULL;
 	}
 
 	if (serverSendResponse != NULL) {
 		CloseHandle(serverSendResponse);
+		serverSendResponse = NULL;
 	}
 
 	if (tempBufferEmpty != NULL) {
 		CloseHandle(tempBufferEmpty);
+		tempBufferEmpty = NULL;
 	}
 
 	eventsDeleting();
 }
-
