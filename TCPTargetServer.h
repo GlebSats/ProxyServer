@@ -12,8 +12,9 @@ public:
 	void Initialization() override {}
 	void Connection() override;
 	void Handler() override;
-	int sendData(const char* pData, int length) override;
+	int sendData(const char* pData, const int length) override;
 	void receiveData() override;
+	void subtractData(const int send_data) override;
 	void closeConnection() override;
 private:
 	void createSockInfo(const char* ip, const char* port, addrinfo** sockInfo); // Create addrinfo and translate host name to address
@@ -21,6 +22,7 @@ private:
 	TCPTargetServer(const TCPTargetServer&) = delete; // Copy not allowed
 	void operator=(const TCPTargetServer&) = delete; // Assignment not allowed
 private:
+	HANDLE bufferEmpty;
 	const char* serverIP;
 	const char* serverPort;
 	addrinfo* serverSockInfo;
