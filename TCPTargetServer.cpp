@@ -41,20 +41,20 @@ void TCPTargetServer::Handler()
 
 	bufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
 	if (bufferEmpty == NULL) {
-		writeLog("Create Event Error: ", GetLastError());
+		writeLog("Server: Create Event Error: ", GetLastError());
 		SetEvent(disconnect);
 		return;
 	}
 
 	targetServerReadySend = WSACreateEvent();
 	if (targetServerReadySend == WSA_INVALID_EVENT) {
-		writeLog("Create WSA Event failed: ", WSAGetLastError());
+		writeLog("Server: Create WSA Event failed: ", WSAGetLastError());
 		SetEvent(disconnect);
 		return;
 	}
 
 	if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
-		writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+		writeLog("Server: WSAEventSelect function failed: ", WSAGetLastError());
 		SetEvent(disconnect);
 		return;
 	}
@@ -66,7 +66,7 @@ void TCPTargetServer::Handler()
 
 		int eventResult2 = WaitForMultipleObjects(3, eventArr2, FALSE, INFINITE);
 		if (eventResult2 == WAIT_FAILED) {
-			writeLog("Error while waiting for events: ", GetLastError());
+			writeLog("Server: Error while waiting for events: ", GetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -77,7 +77,7 @@ void TCPTargetServer::Handler()
 
 		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
-			writeLog("Error while waiting for events: ", WSAGetLastError());
+			writeLog("Server: Error while waiting for events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -93,7 +93,7 @@ void TCPTargetServer::Handler()
 			return;
 		}
 
-		if (targetServerEvents.lNetworkEvents & FD_CLOSE) { 
+		if (targetServerEvents.lNetworkEvents & FD_CLOSE) {
 			writeLog("Connection with the target server has been severed: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
@@ -105,7 +105,7 @@ void TCPTargetServer::Handler()
 
 		if (targetServerEvents.lNetworkEvents & FD_WRITE) {
 			if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE) != 0) {
-				writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+				writeLog("Server: WSAEventSelect function failed: ", WSAGetLastError());
 				SetEvent(disconnect);
 				return;
 			}
@@ -124,7 +124,7 @@ int TCPTargetServer::sendData(const char* pData, const int length)
 		}
 
 		if (WSAEventSelect(server_socket, targetServerReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
-			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+			throw ServException("Server: WSAEventSelect function failed: ", WSAGetLastError());
 		}
 
 		send_data = 0;
@@ -167,7 +167,7 @@ void TCPTargetServer::subtractData(const int send_data)
 }
 
 void TCPTargetServer::closeConnection()
-{ 
+{
 	SetEvent(disconnect);
 
 	if (targetServerReadySend != WSA_INVALID_EVENT) {
@@ -198,7 +198,7 @@ void TCPTargetServer::createSockInfo(const char* ip, const char* port, addrinfo*
 	addrInfo.ai_protocol = IPPROTO_TCP;
 	errState = getaddrinfo(ip, port, &addrInfo, sockInfo);
 	if (errState != 0) {
-		throw ServException("Error getting address information: ", WSAGetLastError());
+		throw ServException("Server: Error getting address information: ", WSAGetLastError());
 	}
 }
 
@@ -206,6 +206,6 @@ void TCPTargetServer::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 {
 	new_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (new_socket == INVALID_SOCKET) {
-		throw ServException("Socket initialization error: ", WSAGetLastError());
+		throw ServException("Server: Socket initialization error: ", WSAGetLastError());
 	}
 }
