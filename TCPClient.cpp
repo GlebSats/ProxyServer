@@ -1,6 +1,7 @@
 #include "TCPClient.h"
 
 TCPClient::TCPClient(const char* listeningPort) :
+	bufferEmpty(NULL),
 	listeningPort(listeningPort),
 	lisSockInfo(nullptr),
 	lis_socket(INVALID_SOCKET),
@@ -78,6 +79,13 @@ void TCPClient::Handler()
 {
 	WSANETWORKEVENTS clientEvents;
 
+	bufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
+	if (bufferEmpty == NULL) {
+		writeLog("Create Event Error: ", GetLastError());
+		SetEvent(disconnect);
+		return;
+	}
+
 	clientReadySend = WSACreateEvent();
 	if (clientReadySend == WSA_INVALID_EVENT) {
 		writeLog("Create WSA Event failed: ", WSAGetLastError());
@@ -92,7 +100,20 @@ void TCPClient::Handler()
 	}
 
 	HANDLE eventArr[3] = { *stopEvent, disconnect, clientReadySend };
+	HANDLE eventArr2[3] = { *stopEvent, disconnect, bufferEmpty };
+
 	while (true) {
+
+		int eventResult2 = WaitForMultipleObjects(3, eventArr2, FALSE, INFINITE);
+		if (eventResult2 == WAIT_FAILED) {
+			writeLog("Error while waiting for events: ", GetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if ((eventResult2 == WAIT_OBJECT_0) || (eventResult2 == WAIT_OBJECT_0 + 1)) {
+			return;
+		}
 
 		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
@@ -112,7 +133,7 @@ void TCPClient::Handler()
 			return;
 		}
 
-		if (clientEvents.lNetworkEvents & FD_CLOSE) { // poslat zbýtek dat?
+		if (clientEvents.lNetworkEvents & FD_CLOSE) { 
 			writeLog("Connection with the client has been severed: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
@@ -166,6 +187,21 @@ void TCPClient::receiveData()
 	if (dataInReceiveBuffer != 0) {
 		SetEvent(dataToSend);
 		ResetEvent(readySend);
+		ResetEvent(bufferEmpty);
+	}
+}
+
+void TCPClient::subtractData(const int send_data)
+{
+	dataInReceiveBuffer -= send_data;
+	indexForRecData += send_data;
+
+	if (dataInReceiveBuffer != 0) {
+		SetEvent(dataToSend);
+	}
+	else {
+		SetEvent(bufferEmpty);
+		ResetEvent(dataToSend);
 	}
 }
 
@@ -175,11 +211,23 @@ void TCPClient::closeConnection()
 
 	if (clientConnectionRequest != WSA_INVALID_EVENT) {
 		WSACloseEvent(clientConnectionRequest);
+		clientConnectionRequest = WSA_INVALID_EVENT;
+	}
+
+	if (clientReadySend != WSA_INVALID_EVENT) {
+		WSACloseEvent(clientReadySend);
+		clientReadySend = WSA_INVALID_EVENT;
+	}
+
+	if (bufferEmpty != NULL) {
+		CloseHandle(bufferEmpty);
+		bufferEmpty = NULL;
 	}
 
 	if (client_socket != INVALID_SOCKET) {
 		shutdown(client_socket, SD_BOTH);
 		closesocket(client_socket);
+		client_socket = INVALID_SOCKET;
 	}
 
 	eventsDeleting();
