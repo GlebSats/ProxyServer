@@ -150,7 +150,7 @@ void WebSocketServer::Handler()
 		int eventResult = WaitForMultipleObjects(3, eventArr, FALSE, INFINITE);
 
 		if (eventResult == WAIT_FAILED) {
-			writeLog("Error while waiting for events: ",GetLastError());
+			writeLog("Error while waiting for events: ", GetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -177,7 +177,7 @@ void WebSocketServer::Handler()
 	}
 }
 
-int WebSocketServer::sendData(const char* pData, const int length) 
+int WebSocketServer::sendData(const char* pData, const int length)
 {
 	if (send_data != 0) {
 		send_data = 0;
@@ -185,8 +185,8 @@ int WebSocketServer::sendData(const char* pData, const int length)
 	}
 
 	std::thread SW([&]() {
-			trySendData(pData, length);
-	});
+		trySendData(pData, length);
+		});
 	SW.detach();
 
 	HANDLE eventArr[1] = { readyReceive };
@@ -233,11 +233,6 @@ void WebSocketServer::closeConnection()
 	if (ConnectionHandle != NULL) {
 		WinHttpCloseHandle(ConnectionHandle);
 		ConnectionHandle = NULL;
-	}
-
-	if (SessionHandle != NULL) {
-		WinHttpCloseHandle(SessionHandle);
-		SessionHandle = NULL;
 	}
 
 	if (serverSendResponse != NULL) {
