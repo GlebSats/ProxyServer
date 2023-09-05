@@ -42,12 +42,12 @@ void TCPClient::Connection()
 	eventsCreation();
 	clientConnectionRequest = WSACreateEvent();
 	if (clientConnectionRequest == WSA_INVALID_EVENT) {
-		throw ServException("Create WSA Event failed: ", WSAGetLastError());
+		throw ServException("Client: Create WSA Event failed: ", WSAGetLastError());
 	}
 
 	if (WSAEventSelect(lis_socket, clientConnectionRequest, FD_ACCEPT) != 0) {
 		WSACloseEvent(clientConnectionRequest);
-		throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+		throw ServException("Client: WSAEventSelect function failed: ", WSAGetLastError());
 	}
 
 	char ipStr[INET_ADDRSTRLEN];
@@ -59,7 +59,7 @@ void TCPClient::Connection()
 	int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
 	if (eventResult == WSA_WAIT_FAILED) {
 		WSACloseEvent(clientConnectionRequest);
-		throw ServException("Error while waiting for events: ", WSAGetLastError());
+		throw ServException("Client: Error while waiting for events: ", WSAGetLastError());
 	}
 
 	if (eventResult == WSA_WAIT_EVENT_0) {
@@ -81,20 +81,20 @@ void TCPClient::Handler()
 
 	bufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
 	if (bufferEmpty == NULL) {
-		writeLog("Create Event Error: ", GetLastError());
+		writeLog("Client: Create Event Error: ", GetLastError());
 		SetEvent(disconnect);
 		return;
 	}
 
 	clientReadySend = WSACreateEvent();
 	if (clientReadySend == WSA_INVALID_EVENT) {
-		writeLog("Create WSA Event failed: ", WSAGetLastError());
+		writeLog("Client: Create WSA Event failed: ", WSAGetLastError());
 		SetEvent(disconnect);
 		return;
 	}
 
 	if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
-		writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+		writeLog("Client: WSAEventSelect function failed: ", WSAGetLastError());
 		SetEvent(disconnect);
 		return;
 	}
@@ -106,7 +106,7 @@ void TCPClient::Handler()
 
 		int eventResult2 = WaitForMultipleObjects(3, eventArr2, FALSE, INFINITE);
 		if (eventResult2 == WAIT_FAILED) {
-			writeLog("Error while waiting for events: ", GetLastError());
+			writeLog("Client: Error while waiting for events: ", GetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -117,7 +117,7 @@ void TCPClient::Handler()
 
 		int eventResult = WSAWaitForMultipleEvents(3, eventArr, FALSE, INFINITE, FALSE);
 		if (eventResult == WSA_WAIT_FAILED) {
-			writeLog("Error while waiting for events: ", WSAGetLastError());
+			writeLog("Client: Error while waiting for events: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
 		}
@@ -133,7 +133,7 @@ void TCPClient::Handler()
 			return;
 		}
 
-		if (clientEvents.lNetworkEvents & FD_CLOSE) { 
+		if (clientEvents.lNetworkEvents & FD_CLOSE) {
 			writeLog("Connection with the client has been severed: ", WSAGetLastError());
 			SetEvent(disconnect);
 			return;
@@ -145,7 +145,7 @@ void TCPClient::Handler()
 
 		if (clientEvents.lNetworkEvents & FD_WRITE) {
 			if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE) != 0) {
-				writeLog("WSAEventSelect function failed: ", WSAGetLastError());
+				writeLog("Client: WSAEventSelect function failed: ", WSAGetLastError());
 				SetEvent(disconnect);
 				return;
 			}
@@ -163,7 +163,7 @@ int TCPClient::sendData(const char* pData, const int length)
 		}
 
 		if (WSAEventSelect(client_socket, clientReadySend, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
-			throw ServException("WSAEventSelect function failed: ", WSAGetLastError());
+			throw ServException("Client: WSAEventSelect function failed: ", WSAGetLastError());
 		}
 
 		send_data = 0;
@@ -250,7 +250,7 @@ void TCPClient::createSockInfo(const char* ip, const char* port, addrinfo** sock
 	addrInfo.ai_protocol = IPPROTO_TCP;
 	errState = getaddrinfo(ip, port, &addrInfo, sockInfo);
 	if (errState != 0) {
-		throw ServException("Error getting address information: ", WSAGetLastError());
+		throw ServException("Client: Error getting address information: ", WSAGetLastError());
 	}
 }
 
@@ -258,7 +258,7 @@ void TCPClient::createNewSocket(SOCKET& new_socket, addrinfo* sockInfo)
 {
 	new_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (new_socket == INVALID_SOCKET) {
-		throw ServException("Socket initialization error: ", WSAGetLastError());
+		throw ServException("Client: Socket initialization error: ", WSAGetLastError());
 	}
 }
 
@@ -266,7 +266,7 @@ void TCPClient::bindSocket()
 {
 	errState = bind(lis_socket, lisSockInfo->ai_addr, lisSockInfo->ai_addrlen);
 	if (errState != 0) {
-		throw ServException("Binding error: ", WSAGetLastError());
+		throw ServException("Client: Binding error: ", WSAGetLastError());
 	}
 }
 
@@ -274,7 +274,7 @@ void TCPClient::listenState()
 {
 	errState = listen(lis_socket, SOMAXCONN);
 	if (errState != 0) {
-		throw ServException("Listening error: ", WSAGetLastError());
+		throw ServException("Client: Listening error: ", WSAGetLastError());
 	}
 	writeLog("Server in listening state...");
 }
