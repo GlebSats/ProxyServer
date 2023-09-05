@@ -16,7 +16,6 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 				client.Connection();
 				targetServer.Connection();
 
-				//threads client a server handlers
 				std::thread cH([&]() {
 					client.Handler();
 					});
@@ -40,23 +39,15 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					}
 
 					if (eventResult == WAIT_OBJECT_0) { 
-						if ((client.dataInReceiveBuffer != 0) /*&& targetServer.readyRecv*/) {
-							int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
-						}
-
-						if ((targetServer.dataInReceiveBuffer != 0) /*&& client.readyRecv*/) {
-							int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
-						}
-
 						client.closeConnection();
 						targetServer.closeConnection();
-						writeLog("Connection has been severed: ", GetLastError());
+						writeLog("Connection has been severed");
 						break;
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 1) { 
-						if ((client.dataInReceiveBuffer != 0) /*&& targetServer.readyRecv*/) {
-							int send_data = targetServer.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
+						if (client.dataInReceiveBuffer != 0) {
+							// poslat data
 						}
 
 						client.closeConnection();
@@ -65,8 +56,8 @@ void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE*
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 2) { 
-						if ((targetServer.dataInReceiveBuffer != 0) /*&& client.readyRecv*/) {
-							int send_data = client.sendData(targetServer.receiveBuffer + targetServer.indexForRecData, targetServer.dataInReceiveBuffer);
+						if (targetServer.dataInReceiveBuffer != 0) {
+							// poslat data
 						}
 
 						targetServer.closeConnection();
