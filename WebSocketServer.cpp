@@ -13,6 +13,7 @@ WebSocketServer::WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort) :
 	RequestHandle(NULL),
 	WebSocketHandle(NULL),
 	send_data(0),
+	errorCode(0),
 	errState(0)
 {
 }
@@ -59,13 +60,19 @@ void WebSocketServer::trySendData(const char* pData, const int length)
 	if (length == BUFFER_SIZE) {
 		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE, (PVOID)pData, length);
 		if (errState != NO_ERROR) {
-			throw ServException("Connection with the server has been severed: ", errState);
+			send_data = -1;
+			errorCode = errState;
+			SetEvent(readyReceive);
+			return;
 		}
 	}
 	else {
 		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
 		if (errState != NO_ERROR) {
-			throw ServException("Connection with the server has been severed: ", errState);
+			send_data = -1;
+			errorCode = errState;
+			SetEvent(readyReceive);
+			return;
 		}
 	}
 
@@ -179,9 +186,13 @@ void WebSocketServer::Handler()
 
 int WebSocketServer::sendData(const char* pData, const int length)
 {
-	if (send_data != 0) {
+	if (send_data > 0) {
 		send_data = 0;
 		return length;
+	}
+
+	if (send_data == -1) {
+		throw ServException("Error sending message to websocket server: ", errorCode);
 	}
 
 	std::thread SW([&]() {
@@ -217,6 +228,8 @@ void WebSocketServer::receiveData()
 
 void WebSocketServer::closeConnection()
 {
+	send_data = 0;
+
 	SetEvent(disconnect);
 
 	if (WebSocketHandle != NULL) {
