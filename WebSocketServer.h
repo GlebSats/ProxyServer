@@ -34,6 +34,7 @@ private:
 	LPCWSTR serverIP;
 	INTERNET_PORT serverPort;
 	int errState;
+	int errorCode;
 	int send_data;
 };
 #endif
