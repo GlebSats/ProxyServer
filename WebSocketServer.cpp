@@ -58,7 +58,7 @@ void WebSocketServer::WaitResponseFromServer()
 void WebSocketServer::trySendData(const char* pData, const int length)
 {
 	if (length == BUFFER_SIZE) {
-		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE, (PVOID)pData, length);
+		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE, (PVOID)pData, length);
 		if (errState != NO_ERROR) {
 			send_data = -1;
 			errorCode = errState;
@@ -67,7 +67,7 @@ void WebSocketServer::trySendData(const char* pData, const int length)
 		}
 	}
 	else {
-		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
+		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
 		if (errState != NO_ERROR) {
 			send_data = -1;
 			errorCode = errState;
