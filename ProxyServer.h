@@ -4,6 +4,6 @@
 #include "ProxyConnection.h"
 #include <thread>
 
-void proxyServer(ProxyConnection& client, ProxyConnection& targetServer, HANDLE* stopEvent);
+void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopEvent);
 
 #endif
