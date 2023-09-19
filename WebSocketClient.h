@@ -1,15 +1,15 @@
-#ifndef WEBSOCKETSERVER_H
-#define WEBSOCKETSERVER_H
+#ifndef WEBSOCKETCLIENT_H
+#define WEBSOCKETCLIENT_H
 
 #include "ProxyConnection.h"
 #include <winhttp.h>
 #include <cstring>
 #include <thread>
 
-class WebSocketServer : public ProxyConnection {
+class WebSocketClient : public ProxyConnection {
 public:
-	WebSocketServer(LPCWSTR serverIP, INTERNET_PORT serverPort);
-	~WebSocketServer();
+	WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort);
+	~WebSocketClient();
 	void Initialization() override;
 	void Connection() override;
 	void Handler() override;
