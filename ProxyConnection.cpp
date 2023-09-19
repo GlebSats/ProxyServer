@@ -31,7 +31,7 @@ void ProxyConnection::subtractData(const int send_data)
 
 int ProxyConnection::WaitingToSend()
 {
-	HANDLE eventArr[3] = { *stopEvent, disconnect, readyReceive };
+	HANDLE eventArr[3] = { *stopEvent, disconnect, readySend };
 	int eventResult = WaitForMultipleObjects(3, eventArr, FALSE, INFINITE);
 
 	if (eventResult == WAIT_FAILED) {
