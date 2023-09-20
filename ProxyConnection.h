@@ -10,6 +10,10 @@
 #include "ServException.h"
 #include <Windows.h>
 
+//
+#include "writeLogHex.h"
+//
+
 #define BUFFER_SIZE 1024
 
 class ProxyConnection {
