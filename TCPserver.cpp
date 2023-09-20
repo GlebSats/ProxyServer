@@ -170,6 +170,9 @@ int TCPserver::sendData(const char* pData, const int length)
 
 		send_data = 0;
 	}
+	//
+	writeLogHex("Client< S:" + std::to_string(send_data) + " D: ", pData[0], pData[1], pData[2]);
+	//
 	return send_data;
 }
 
