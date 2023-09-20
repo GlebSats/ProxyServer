@@ -75,7 +75,9 @@ void WebSocketClient::trySendData(const char* pData, const int length)
 			return;
 		}
 	}
-
+	//
+	writeLogHex("Target< S:" + std::to_string(length) + " D: ", pData[0], pData[1], pData[2]);
+	//
 	send_data = length;
 	SetEvent(readySend);
 }
