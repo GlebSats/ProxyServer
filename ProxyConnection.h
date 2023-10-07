@@ -10,9 +10,7 @@
 #include "ServException.h"
 #include <Windows.h>
 
-//
 #include "writeLogHex.h"
-//
 
 #define BUFFER_SIZE 1024
 
@@ -29,7 +27,7 @@ public:
 	virtual void receiveData() = 0;
 	virtual void closeConnection() = 0;
 	virtual void subtractData(const int send_data);
-	int WaitingToSend();
+	void WaitingToSend();
 protected:
 	void eventsCreation();
 	void eventsDeleting();
@@ -39,10 +37,12 @@ protected:
 	char receiveBuffer[BUFFER_SIZE];
 	int dataInReceiveBuffer;
 	int indexForRecData;
+	bool waitingResult;
 	HANDLE disconnect;
 	HANDLE readySend;
 	HANDLE readyReceive;
 	HANDLE dataToSend;
+	HANDLE endOfWaiting;
 };
 
 #endif

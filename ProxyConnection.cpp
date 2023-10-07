@@ -6,8 +6,10 @@ ProxyConnection::ProxyConnection() :
 	readySend(NULL),
 	readyReceive(NULL),
 	dataToSend(NULL),
+	endOfWaiting(NULL),
 	dataInReceiveBuffer(0),
-	indexForRecData(0)
+	indexForRecData(0),
+	waitingResult(false)
 {
 	ZeroMemory(&receiveBuffer, sizeof(receiveBuffer));
 }
@@ -29,22 +31,22 @@ void ProxyConnection::subtractData(const int send_data)
 	}
 }
 
-int ProxyConnection::WaitingToSend()
-{
+void ProxyConnection::WaitingToSend(){
 	HANDLE eventArr[3] = { *stopEvent, disconnect, readySend };
 	int eventResult = WaitForMultipleObjects(3, eventArr, FALSE, INFINITE);
 
 	if (eventResult == WAIT_FAILED) {
 		writeLog("Error while waiting for events: ", GetLastError());
 		SetEvent(disconnect);
-		return -1;
+		waitingResult = false;
 	}
-
-	if ((eventResult == WAIT_OBJECT_0) || (eventResult == WAIT_OBJECT_0 + 1)) {
-		return -1;
+	else if ((eventResult == WAIT_OBJECT_0) || (eventResult == WAIT_OBJECT_0 + 1)) {
+		waitingResult = false;
 	}
-
-	return 0;
+	else {
+		waitingResult = true;
+		SetEvent(endOfWaiting);
+	}
 }
 
 void ProxyConnection::eventsCreation()
@@ -68,6 +70,11 @@ void ProxyConnection::eventsCreation()
 	if (dataToSend == NULL) {
 		throw ServException("Create Event failed: ", GetLastError());
 	}
+
+	endOfWaiting = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (endOfWaiting == NULL) {
+		throw ServException("Create Event failed: ", GetLastError());
+	}
 }
 void ProxyConnection::eventsDeleting()
 {
@@ -86,5 +93,9 @@ void ProxyConnection::eventsDeleting()
 	if (disconnect != NULL) {
 		CloseHandle(disconnect);
 		disconnect = NULL;
+	}
+	if (endOfWaiting != NULL) {
+		CloseHandle(endOfWaiting);
+		endOfWaiting = NULL;
 	}
 }

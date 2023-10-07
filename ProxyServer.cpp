@@ -1,4 +1,4 @@
-include "ProxyServer.h"
+﻿#include "ProxyServer.h"
 
 void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopEvent) {
 
@@ -16,25 +16,29 @@ void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopE
 				server.Connection();
 				client.Connection();
 
-				std::thread cH([&]() {
+				std::thread sH([&]() {
 					server.Handler();
 					});
-				cH.detach();
+				std::thread ServerWaitingSend;
 
-				std::thread sH([&]() {
+				std::thread cH([&]() {
 					client.Handler();
 					});
-				sH.detach();
+				std::thread ClientWaitingSend;
 
 				while (true)
 				{
-					HANDLE eventArr[7] = { *stopEvent, server.disconnect, client.disconnect, server.dataToSend, client.dataToSend, server.readyReceive, client.readyReceive };
-					int eventResult = WaitForMultipleObjects(7, eventArr, FALSE, INFINITE);
+					HANDLE eventArr[9] = { *stopEvent, server.disconnect, client.disconnect, server.dataToSend, client.dataToSend,
+					server.readyReceive, client.readyReceive, server.endOfWaiting, client.endOfWaiting };
+
+					int eventResult = WaitForMultipleObjects(9, eventArr, FALSE, INFINITE);
 
 					if (eventResult == WAIT_FAILED) {
 						server.closeConnection();
 						client.closeConnection();
 						writeLog("Error while waiting for events: ", GetLastError());
+						sH.join();
+						cH.join();
 						break;
 					}
 
@@ -42,58 +46,71 @@ void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopE
 						server.closeConnection();
 						client.closeConnection();
 						writeLog("Connection has been severed");
+						sH.join();
+						cH.join();
 						break;
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 1) {
 						if (server.dataInReceiveBuffer != 0) {
-							// poslat data
+							while (server.dataInReceiveBuffer != 0) {
+								int send_data = client.sendData(server.receiveBuffer + server.indexForRecData, server.dataInReceiveBuffer);
+								if (send_data <= 0) {
+									break;
+								}
+								server.dataInReceiveBuffer -= send_data;
+							}
 						}
-
 						server.closeConnection();
 						client.closeConnection();
+						sH.join();
+						cH.join();
 						break;
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 2) {
 						if (client.dataInReceiveBuffer != 0) {
-							// poslat data
+							while (client.dataInReceiveBuffer != 0) {
+								int send_data = server.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
+								if (send_data <= 0) {
+									break;
+								}
+								client.dataInReceiveBuffer -= send_data;
+							}
 						}
 
 						client.closeConnection();
 						server.closeConnection();
+						sH.join();
+						cH.join();
 						break;
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 3) {
 						int send_data = client.sendData(server.receiveBuffer + server.indexForRecData, server.dataInReceiveBuffer);
-						if (send_data != 0) {
+						if (send_data > 0) {
 							server.subtractData(send_data);
+						}
+						else if (send_data == -1) {
+							SetEvent(client.disconnect);
 						}
 						else {
 							ResetEvent(server.dataToSend);
-							std::thread CW([&]() {
-								if (client.WaitingToSend() == 0) {
-									SetEvent(server.dataToSend);
-								}
-								});
-							CW.detach();
+							ClientWaitingSend = std::thread(&ProxyConnection::WaitingToSend, &client);
 						}
 					}
 
 					if (eventResult == WAIT_OBJECT_0 + 4) {
 						int send_data = server.sendData(client.receiveBuffer + client.indexForRecData, client.dataInReceiveBuffer);
-						if (send_data != 0) {
+						if (send_data > 0) {
 							client.subtractData(send_data);
+						}
+						else if (send_data == -1) {
+							SetEvent(server.disconnect);
 						}
 						else {
 							ResetEvent(client.dataToSend);
-							std::thread SW([&]() {
-								if (server.WaitingToSend() == 0) {
-									SetEvent(client.dataToSend);
-								}
-								});
-							SW.detach();
+							ServerWaitingSend = std::thread(&ProxyConnection::WaitingToSend, &server);
 						}
 					}
 
@@ -104,13 +121,27 @@ void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopE
 					if (eventResult == WAIT_OBJECT_0 + 6) {
 						client.receiveData();
 					}
+
+					if (eventResult == WAIT_OBJECT_0 + 7) {
+						if (server.waitingResult) {
+							SetEvent(client.dataToSend);
+						}
+						ResetEvent(server.endOfWaiting);
+						ServerWaitingSend.join();
+					}
+
+					if (eventResult == WAIT_OBJECT_0 + 8) {
+						if (client.waitingResult) {
+							SetEvent(server.dataToSend);
+						}
+						ResetEvent(client.endOfWaiting);
+						ClientWaitingSend.join();
+					}
 				}
 			}
 			catch (const ServException& ex)
 			{
 				writeLog(ex.GetErrorType(), ex.GetErrorCode());
-				server.closeConnection();
-				client.closeConnection();
 			}
 		}
 	}

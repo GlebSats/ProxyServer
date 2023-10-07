@@ -1,4 +1,4 @@
-#include "TCPclient.h"
+﻿#include "TCPclient.h"
 
 TCPclient::TCPclient(const char* serverIP, const char* serverPort) :
 	bufferEmpty(NULL),
@@ -24,7 +24,6 @@ TCPclient::~TCPclient()
 
 void TCPclient::Connection()
 {
-	eventsCreation();
 	createSockInfo(serverIP, serverPort, &serverSockInfo);
 	createNewSocket(server_socket, serverSockInfo);
 
@@ -33,6 +32,7 @@ void TCPclient::Connection()
 		throw ServException("Client: Connection to Target Server failed: ", WSAGetLastError());
 	}
 	writeLog("Client: Connection to Target Server successful");
+	eventsCreation();
 }
 
 void TCPclient::Handler()
@@ -120,13 +120,17 @@ int TCPclient::sendData(const char* pData, const int length)
 	int send_data = send(server_socket, pData, length, 0);
 	if (send_data == SOCKET_ERROR) {
 		if (WSAGetLastError() != WSAEWOULDBLOCK) {
-			throw ServException("Client: Connection with the server has been severed: ", WSAGetLastError());
+			writeLog("Client: Connection with the server has been severed: ", WSAGetLastError());
+			SetEvent(disconnect);
+			return -1;
 		}
 
 		ResetEvent(readySend);
 
 		if (WSAEventSelect(server_socket, serverEvent, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
-			throw ServException("Client: WSAEventSelect function failed: ", WSAGetLastError());
+			writeLog("Client: WSAEventSelect function failed: ", WSAGetLastError());
+			SetEvent(disconnect);
+			return -1;
 		}
 
 		send_data = 0;
@@ -145,7 +149,9 @@ void TCPclient::receiveData()
 
 	int rec_data = recv(server_socket, receiveBuffer, BUFFER_SIZE, 0);
 	if (rec_data == SOCKET_ERROR) {
-		throw ServException("Client: Connection with the server has been severed: ", WSAGetLastError());
+		writeLog("Client: Connection with the server has been severed: ", WSAGetLastError());
+		SetEvent(disconnect);
+		return;
 	}
 	dataInReceiveBuffer = rec_data;
 	indexForRecData = 0;

@@ -1,4 +1,4 @@
-#include "TCPserver.h"
+﻿#include "TCPserver.h"
 
 TCPserver::TCPserver(const char* listeningPort) :
 	bufferEmpty(NULL),
@@ -39,7 +39,6 @@ void TCPserver::Initialization()
 
 void TCPserver::Connection()
 {
-	eventsCreation();
 	clientConnectionRequest = WSACreateEvent();
 	if (clientConnectionRequest == WSA_INVALID_EVENT) {
 		throw ServException("Server: Create WSA Event failed: ", WSAGetLastError());
@@ -73,12 +72,11 @@ void TCPserver::Connection()
 			throw ServException("Server: Client connection error: ", WSAGetLastError());
 		}
 	}
+	eventsCreation();
 }
 
 void TCPserver::Handler()
 {
-	WSANETWORKEVENTS eventType;
-
 	bufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
 	if (bufferEmpty == NULL) {
 		writeLog("Server: Create Event Error: ", GetLastError());
@@ -99,6 +97,7 @@ void TCPserver::Handler()
 		return;
 	}
 
+	WSANETWORKEVENTS eventType;
 	HANDLE eventArr[3] = { *stopEvent, disconnect, clientEvent };
 	HANDLE eventArr2[3] = { *stopEvent, disconnect, bufferEmpty };
 
@@ -140,6 +139,9 @@ void TCPserver::Handler()
 		}
 
 		if (eventType.lNetworkEvents & FD_READ) {
+			//
+			ResetEvent(bufferEmpty);
+			//
 			SetEvent(readyReceive);
 		}
 
@@ -159,13 +161,17 @@ int TCPserver::sendData(const char* pData, const int length)
 	int send_data = send(client_socket, pData, length, 0);
 	if (send_data == SOCKET_ERROR) {
 		if (WSAGetLastError() != WSAEWOULDBLOCK) {
-			throw ServException("Server: Connection with the client has been severed: ", WSAGetLastError());
+			writeLog("Server: Connection with the client has been severed: ", WSAGetLastError());
+			SetEvent(disconnect);
+			return -1;
 		}
 
 		ResetEvent(readySend);
 
 		if (WSAEventSelect(client_socket, clientEvent, FD_READ | FD_CLOSE | FD_WRITE) != 0) {
-			throw ServException("Server: WSAEventSelect function failed: ", WSAGetLastError());
+			writeLog("Server: WSAEventSelect function failed: ", WSAGetLastError());
+			SetEvent(disconnect);
+			return -1;
 		}
 
 		send_data = 0;
@@ -184,7 +190,9 @@ void TCPserver::receiveData()
 
 	int rec_data = recv(client_socket, receiveBuffer, BUFFER_SIZE, 0);
 	if (rec_data == SOCKET_ERROR) {
-		throw ServException("Server: Connection with the client has been severed: ", WSAGetLastError());
+		writeLog("Server: Connection with the client has been severed: ", WSAGetLastError());
+		SetEvent(disconnect);
+		return;
 	}
 	dataInReceiveBuffer = rec_data;
 	indexForRecData = 0;

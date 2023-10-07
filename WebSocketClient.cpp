@@ -1,18 +1,21 @@
 #include "WebSocketClient.h"
 
 WebSocketClient::WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort) :
-	dataInTempBuffer(0),
+	pDataToSend(NULL),
+	sizeDataToSend(0),
+	trySend(NULL),
+	receivedData(0),
 	serverIP(serverIP),
 	serverPort(serverPort),
 	SendResponseStatus(FALSE),
 	ReceiveResponseStatus(FALSE),
 	serverSendResponse(NULL),
-	tempBufferEmpty(NULL),
+	bufferEmpty(NULL),
 	SessionHandle(NULL),
 	ConnectionHandle(NULL),
 	RequestHandle(NULL),
 	WebSocketHandle(NULL),
-	send_data(0),
+	sentBytes(0),
 	errorCode(0),
 	errState(0)
 {
@@ -22,21 +25,6 @@ WebSocketClient::~WebSocketClient()
 {
 	if (SessionHandle != NULL) {
 		WinHttpCloseHandle(SessionHandle);
-	}
-	if (ConnectionHandle != NULL) {
-		WinHttpCloseHandle(ConnectionHandle);
-	}
-	if (RequestHandle != NULL) {
-		WinHttpCloseHandle(RequestHandle);
-	}
-	if (WebSocketHandle != NULL) {
-		WinHttpCloseHandle(WebSocketHandle);
-	}
-	if (serverSendResponse != NULL) {
-		CloseHandle(serverSendResponse);
-	}
-	if (tempBufferEmpty != NULL) {
-		CloseHandle(tempBufferEmpty);
 	}
 }
 
@@ -50,42 +38,14 @@ void WebSocketClient::Initialization()
 
 void WebSocketClient::WaitResponseFromServer()
 {
-	SendResponseStatus = WinHttpSendRequest(RequestHandle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0);
+	LPCWSTR addHeader = L"Sec-WebSocket-Protocol: mqttv3.1\r\n";
+	SendResponseStatus = WinHttpSendRequest(RequestHandle, addHeader, -1L, NULL, 0, 0, WINHTTP_FLAG_SECURE);
 	ReceiveResponseStatus = WinHttpReceiveResponse(RequestHandle, NULL);
 	SetEvent(serverSendResponse);
 }
 
-void WebSocketClient::trySendData(const char* pData, const int length)
-{
-	if (length == BUFFER_SIZE) {
-		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE, (PVOID)pData, length);
-		if (errState != NO_ERROR) {
-			send_data = -1;
-			errorCode = errState;
-			SetEvent(readySend);
-			return;
-		}
-	}
-	else {
-		errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE, (PVOID)pData, length);
-		if (errState != NO_ERROR) {
-			send_data = -1;
-			errorCode = errState;
-			SetEvent(readySend);
-			return;
-		}
-	}
-	//
-	writeLogHex("Target< S:" + std::to_string(length) + " D: ", pData[0], pData[1], pData[2]);
-	//
-	send_data = length;
-	SetEvent(readySend);
-}
-
 void WebSocketClient::Connection()
 {
-	eventsCreation();
-
 	serverSendResponse = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (serverSendResponse == NULL) {
 		throw ServException("Client: Create Event Error: ", GetLastError());
@@ -144,16 +104,19 @@ void WebSocketClient::Connection()
 
 		writeLog("Client: Connection to Web Socket server successful");
 	}
+
+	eventsCreation();
+	preparation();
 }
 
 void WebSocketClient::Handler()
 {
-	tempBufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
-	if (tempBufferEmpty == NULL) {
+	bufferEmpty = CreateEvent(NULL, TRUE, TRUE, NULL);
+	if (bufferEmpty == NULL) {
 		throw ServException("Client: Create Event Error: ", GetLastError());
 	}
 
-	HANDLE eventArr[3] = { *stopEvent, disconnect, tempBufferEmpty };
+	HANDLE eventArr[3] = { *stopEvent, disconnect, bufferEmpty };
 
 	while (true) {
 		int eventResult = WaitForMultipleObjects(3, eventArr, FALSE, INFINITE);
@@ -168,70 +131,142 @@ void WebSocketClient::Handler()
 			return;
 		}
 
-		errState = WinHttpWebSocketReceive(WebSocketHandle, tempReceiveBuffer, BUFFER_SIZE, &dataInTempBuffer, &tempBufferType);
+		errState = WinHttpWebSocketReceive(WebSocketHandle, receiveBuffer, BUFFER_SIZE, &receivedData, &bufferType);
 		if (errState != NO_ERROR) {
 			writeLog("Client: Web Socket Receive Error : ", errState);
 			SetEvent(disconnect);
 			return;
 		}
 
-		if (tempBufferType == WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE) {
+		if (bufferType == WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE) {
 			writeLog("Client: Connection with the server has been severed: ", GetLastError());
 			SetEvent(disconnect);
 			return;
 		}
 
+		ResetEvent(bufferEmpty);
 		SetEvent(readyReceive);
-		ResetEvent(tempBufferEmpty);
 	}
+}
+
+void WebSocketClient::trySendData()
+{
+	HANDLE eventArr[3] = { *stopEvent, disconnect, trySend };
+
+	while (true) {
+
+		int eventResult = WaitForMultipleObjects(3, eventArr, FALSE, INFINITE);
+
+		if (eventResult == WAIT_FAILED) {
+			writeLog("Client: Error while waiting for events: ", GetLastError());
+			SetEvent(disconnect);
+			return;
+		}
+
+		if ((eventResult == WAIT_OBJECT_0) || (eventResult == WAIT_OBJECT_0 + 1)) {
+			return;
+		}
+
+		if (sizeDataToSend == BUFFER_SIZE) {
+			errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE, (PVOID)pDataToSend, sizeDataToSend);
+			if (errState != NO_ERROR) {
+				sentBytes = -1;
+				errorCode = errState;
+				SetEvent(readySend);
+				return;
+			}
+		}
+		else {
+			errState = WinHttpWebSocketSend(WebSocketHandle, WINHTTP_WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE, (PVOID)pDataToSend, sizeDataToSend);
+			if (errState != NO_ERROR) {
+				sentBytes = -1;
+				errorCode = errState;
+				SetEvent(readySend);
+				return;
+			}
+		}
+		//
+		writeLogHex("Target< S:" + std::to_string(sizeDataToSend) + " D: ", pDataToSend[0], pDataToSend[1], pDataToSend[2]);
+		//
+		sentBytes = sizeDataToSend;
+		ResetEvent(trySend);
+		SetEvent(readySend);
+	}
+}
+
+void WebSocketClient::preparation()
+{
+	trySend = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (trySend == NULL) {
+		throw ServException("Client: Create Event Error: ", GetLastError());
+	}
+
+	TS = std::thread(&WebSocketClient::trySendData, this);
+
+	sentBytes = 0;
 }
 
 int WebSocketClient::sendData(const char* pData, const int length)
 {
-	if (send_data > 0) {
-		send_data = 0;
+	if (sentBytes > 0) {
+		sentBytes = 0;
 		return length;
 	}
 
-	if (send_data == -1) {
-		throw ServException("Client: Error sending message to websocket server: ", errorCode);
+	if (sentBytes == -1) {
+		writeLog("Client: Error sending message to websocket server: ", errorCode);
+		SetEvent(disconnect);
+		return -1;
 	}
 
-	std::thread SW([&]() {
-		trySendData(pData, length);
-		});
-	SW.detach();
+	pDataToSend = pData;
+	sizeDataToSend = length;
+	SetEvent(trySend);
 
 	HANDLE eventArr[1] = { readySend };
 	int eventResult = WaitForMultipleObjects(1, eventArr, FALSE, 1000);
 
 	if (eventResult == WAIT_FAILED) {
-		throw ServException("Client: Error while waiting for events: ", GetLastError());
+		writeLog("Client: Error while waiting for events: ", GetLastError());
+		SetEvent(disconnect);
+		return -1;
 	}
 
 	if (eventResult == WAIT_TIMEOUT) {
+		ResetEvent(readySend);
 		return 0;
 	}
 
+	sentBytes = 0;
 	return length;
 }
 
 void WebSocketClient::receiveData()
 {
-	if (dataInReceiveBuffer == 0) {
-		memcpy(receiveBuffer, tempReceiveBuffer, dataInTempBuffer);
-		dataInReceiveBuffer = dataInTempBuffer;
+	if (receivedData != 0) {
+		dataInReceiveBuffer = receivedData;
 		indexForRecData = 0;
-		dataInTempBuffer = 0;
-		SetEvent(tempBufferEmpty);
+		SetEvent(dataToSend);
 		ResetEvent(readyReceive);
+	}
+}
+
+void WebSocketClient::subtractData(const int send_data)
+{
+	dataInReceiveBuffer -= send_data;
+	indexForRecData += send_data;
+
+	if (dataInReceiveBuffer != 0) {
+		SetEvent(dataToSend);
+	}
+	else {
+		SetEvent(bufferEmpty);
+		ResetEvent(dataToSend);
 	}
 }
 
 void WebSocketClient::closeConnection()
 {
-	send_data = 0;
-
 	SetEvent(disconnect);
 
 	if (WebSocketHandle != NULL) {
@@ -255,10 +290,16 @@ void WebSocketClient::closeConnection()
 		serverSendResponse = NULL;
 	}
 
-	if (tempBufferEmpty != NULL) {
-		CloseHandle(tempBufferEmpty);
-		tempBufferEmpty = NULL;
+	if (bufferEmpty != NULL) {
+		CloseHandle(bufferEmpty);
+		bufferEmpty = NULL;
 	}
 
+	if (trySend != NULL) {
+		CloseHandle(trySend);
+		trySend = NULL;
+	}
+
+	TS.join();
 	eventsDeleting();
 }

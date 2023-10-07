@@ -15,18 +15,22 @@ public:
 	void Handler() override;
 	int sendData(const char* pData, const int length) override;
 	void receiveData() override;
+	void subtractData(const int send_data) override;
 	void closeConnection() override;
 private:
 	void WaitResponseFromServer();
-	void trySendData(const char* pData, const int length);
+	void trySendData();
+	void preparation();
 private:
-	char tempReceiveBuffer[BUFFER_SIZE];
-	DWORD dataInTempBuffer;
-	WINHTTP_WEB_SOCKET_BUFFER_TYPE tempBufferType;
+	const char* pDataToSend;
+	int sizeDataToSend;
+	HANDLE trySend;
+	DWORD receivedData;
+	WINHTTP_WEB_SOCKET_BUFFER_TYPE bufferType;
 	bool SendResponseStatus;
 	bool ReceiveResponseStatus;
 	HANDLE serverSendResponse;
-	HANDLE tempBufferEmpty;
+	HANDLE bufferEmpty;
 	HINTERNET SessionHandle;
 	HINTERNET ConnectionHandle;
 	HINTERNET RequestHandle;
@@ -35,6 +39,8 @@ private:
 	INTERNET_PORT serverPort;
 	int errState;
 	int errorCode;
-	int send_data;
+	int sentBytes;
+	std::thread TS;
+
 };
 #endif
