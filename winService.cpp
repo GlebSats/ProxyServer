@@ -188,6 +188,9 @@ VOID SvcUninstall() {
         return;
     }
 }
+//
+WCHAR buffer[256];
+std::map <std::unique_ptr<ProxyConnection>, std::unique_ptr<ProxyConnection>> Connections;
 
 VOID readInitFile() {
 	std::vector <std::wstring> Sections;
