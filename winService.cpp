@@ -188,4 +188,60 @@ VOID SvcUninstall() {
         return;
     }
 }
-    
+
+VOID readInitFile() {
+	std::vector <std::wstring> Sections;
+	DWORD bytesRead = GetPrivateProfileSectionNamesW(buffer, sizeof(buffer), szPath);
+	if (bytesRead > 0) {
+		size_t startP = 0;
+		while (startP < bytesRead) {
+			std::wstring sectionName = &buffer[startP];
+			Sections.push_back(sectionName);
+			startP += sectionName.length() + 1;
+		}
+	}
+	else {
+		//write error
+	}
+
+ 	std::vector <LPCWSTR> keyNames{ L"Listening port", L"Host", L"Protocol", L"Subprotocol",  L"Port" };
+	for (auto &section: Sections) {
+		std::vector <std::wstring> connectionOptions;
+		int targetPort = 0;
+		for (auto& key : keyNames) {
+			if (key == L"Port") {
+				targetPort = GetPrivateProfileIntW(section.c_str(), key, 0, szPath);
+				if (targetPort == 0) {
+					//write error
+				}
+			}
+			else {
+				bytesRead = GetPrivateProfileStringW(section.c_str(), key, L"", buffer, sizeof(buffer), szPath);
+				if (bytesRead > 0) {
+					connectionOptions.push_back(buffer);
+				}
+				else {
+					if (key != L"Subprotocol") {
+						//write error
+					}
+				}
+			}
+		}
+		if (connectionOptions[2] == L"websocket") {
+			std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
+			std::unique_ptr<ProxyConnection> server = std::make_unique<TCPServer>(lPort.c_str());
+			std::unique_ptr<ProxyConnection> client = std::make_unique<WebSocketClient>(connectionOptions[1].c_str(), targetPort);
+			Connections.emplace(std::move(server), std::move(client));
+		}
+		else if(connectionOptions[2] == L"TCP") {
+			std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
+			std::string sHost(connectionOptions[1].begin(), connectionOptions[1].end());
+			std::unique_ptr<ProxyConnection> server = std::make_unique<TCPServer>(lPort.c_str());
+			std::unique_ptr<ProxyConnection> client = std::make_unique<TCPClient>(sHost.c_str(), targetPort);
+			Connections.emplace(std::move(server), std::move(client));
+		}
+		else {
+			//write error protocol
+		}
+	}
+}
