@@ -1,4 +1,4 @@
-﻿#ifndef WIN32_LEAN_AND_MEAN
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 
@@ -7,17 +7,22 @@
 #include "ServException.h"
 #include "ProxyServer.h"
 #include "TCPserver.h"
+#include "TCPclient.h"
 #include "WebSocketClient.h"
+#include <vector>
+#include <string>
 #include <Windows.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "winhttp.lib")
 
 // Global Variables
+TCHAR UnquotedPath[MAX_PATH];
 TCHAR SVCNAME[] = L"webSocketProxy";
 SERVICE_STATUS serviceStatus;
 SERVICE_STATUS_HANDLE serviceStatusHandle;
 HANDLE serviceStopEvent = NULL;
+std::vector <std::pair<std::shared_ptr<ProxyConnection>, std::shared_ptr<ProxyConnection>>> Connections;
 // Windows Service Functions
 VOID WINAPI winServiceMain(DWORD Argc, LPTSTR* Argv);
 VOID WINAPI winServiceHandler(DWORD controlCode);
@@ -25,6 +30,7 @@ VOID ReportWinServiceStatus(DWORD dwCurrentState, DWORD dwWin32ExitCode, DWORD d
 VOID InitWinService(DWORD Argc, LPTSTR* Argv);
 VOID SvcInstall();
 VOID SvcUninstall();
+VOID readInitFile();
 //
 int _tmain(int argc, TCHAR* argv[])
 {
@@ -108,16 +114,14 @@ VOID ReportWinServiceStatus(DWORD dwCurrentState, DWORD dwWin32ExitCode, DWORD d
 }
 
 VOID InitWinService(DWORD Argc, LPTSTR* Argv) {
-
+    //здесь нужно грузить конфиг
     serviceStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (serviceStopEvent == NULL) {
         ReportWinServiceStatus(SERVICE_STOPPED, GetLastError(), 0);
     }
     else {
-        TCPserver server("4444");
-        WebSocketClient client(L"127.0.0.1", 8080);
         ReportWinServiceStatus(SERVICE_RUNNING, NO_ERROR, 0);
-        proxyServer(server, client, &serviceStopEvent);
+        proxyServer(Connections[0].first, Connections[0].second, &serviceStopEvent);
     }
 
     ReportWinServiceStatus(SERVICE_STOPPED, NO_ERROR, 0);
@@ -125,14 +129,15 @@ VOID InitWinService(DWORD Argc, LPTSTR* Argv) {
 
 VOID SvcInstall() {
     SC_HANDLE hSCManager, hService;
-    TCHAR UnquotedPath[MAX_PATH];
 
     if (!GetModuleFileName(NULL, UnquotedPath, MAX_PATH))
     {
         printf("Cannot install service (%d)\n", GetLastError());
         return;
     }
-
+    //
+    readInitFile();
+    //
     TCHAR szPath[MAX_PATH];
     StringCbPrintf(szPath, MAX_PATH, TEXT("\"%s\""), UnquotedPath);
 
@@ -188,63 +193,73 @@ VOID SvcUninstall() {
         return;
     }
 }
-//
-WCHAR buffer[256];
-std::map <std::unique_ptr<ProxyConnection>, std::unique_ptr<ProxyConnection>> Connections;
 
 VOID readInitFile() {
-	std::vector <std::wstring> Sections;
-	DWORD bytesRead = GetPrivateProfileSectionNamesW(buffer, sizeof(buffer), szPath);
-	if (bytesRead > 0) {
-		size_t startP = 0;
-		while (startP < bytesRead) {
-			std::wstring sectionName = &buffer[startP];
-			Sections.push_back(sectionName);
-			startP += sectionName.length() + 1;
-		}
-	}
-	else {
-		//write error
-	}
+    WCHAR buffer[256];
+    std::vector <std::wstring> Sections;
 
- 	std::vector <LPCWSTR> keyNames{ L"Listening port", L"Host", L"Protocol", L"Subprotocol",  L"Port" };
-	for (auto &section: Sections) {
-		std::vector <std::wstring> connectionOptions;
-		int targetPort = 0;
-		for (auto& key : keyNames) {
-			if (key == L"Port") {
-				targetPort = GetPrivateProfileIntW(section.c_str(), key, 0, szPath);
-				if (targetPort == 0) {
-					//write error
-				}
-			}
-			else {
-				bytesRead = GetPrivateProfileStringW(section.c_str(), key, L"", buffer, sizeof(buffer), szPath);
-				if (bytesRead > 0) {
-					connectionOptions.push_back(buffer);
-				}
-				else {
-					if (key != L"Subprotocol") {
-						//write error
-					}
-				}
-			}
-		}
-		if (connectionOptions[2] == L"websocket") {
-			std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
-			std::unique_ptr<ProxyConnection> server = std::make_unique<TCPServer>(lPort.c_str());
-			std::unique_ptr<ProxyConnection> client = std::make_unique<WebSocketClient>(connectionOptions[1].c_str(), targetPort);
-			Connections.emplace(std::move(server), std::move(client));
-		}
-		else if(connectionOptions[2] == L"TCP") {
-			std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
-			std::string sHost(connectionOptions[1].begin(), connectionOptions[1].end());
-			std::unique_ptr<ProxyConnection> server = std::make_unique<TCPServer>(lPort.c_str());
-			std::unique_ptr<ProxyConnection> client = std::make_unique<TCPClient>(sHost.c_str(), targetPort);
-			Connections.emplace(std::move(server), std::move(client));
-		}
-		else {
-			//write error protocol
-		}
-	}
+    std::wstring configPath = UnquotedPath;
+    size_t i = configPath.find_last_of(L"\\");
+    configPath = configPath.substr(0, i+1) + L"config.ini";
+
+    DWORD bytesRead = GetPrivateProfileSectionNamesW(buffer, sizeof(buffer), configPath.c_str());
+    if (bytesRead > 0) {
+        size_t startP = 0;
+        while (startP < bytesRead) {
+            std::wstring sectionName = &buffer[startP];
+            Sections.push_back(sectionName);
+            startP += sectionName.length() + 1;
+        }
+    }
+    else {
+        //write error
+        std::cout << "read init error";
+        return;
+    }
+
+    std::vector <LPCWSTR> keyNames{ L"Listening port", L"Host", L"Protocol", L"Subprotocol", L"Port" };
+    for (auto& section : Sections) {
+        std::vector <std::wstring> connectionOptions;
+        int targetPort = 0;
+        for (auto& key : keyNames) {
+            if (key == L"Port") {
+                targetPort = GetPrivateProfileIntW(section.c_str(), key, 0, configPath.c_str());
+                if (targetPort == 0) {
+                    //write error
+                    std::cout << "read init error";
+                    return;
+                }
+            }
+            else {
+                bytesRead = GetPrivateProfileStringW(section.c_str(), key, L"", buffer, sizeof(buffer), configPath.c_str());
+                if (bytesRead > 0) {
+                    connectionOptions.push_back(buffer);
+                }
+                else {
+                    if (key != L"Subprotocol") {
+                        //write error
+                        std::cout << "read init error";
+                        return;
+                    }
+                }
+            }
+        }
+        if (connectionOptions[2] == L"websocket") {
+            std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
+            std::shared_ptr<ProxyConnection> server = std::make_shared<TCPserver>(lPort.c_str());
+            std::shared_ptr<ProxyConnection> client = std::make_shared<WebSocketClient>(connectionOptions[1].c_str(), targetPort);
+            Connections.push_back(std::make_pair(server, client));
+        }
+        else if (connectionOptions[2] == L"TCP") {
+            std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
+            std::string sHost(connectionOptions[1].begin(), connectionOptions[1].end());
+            std::string sPort = std::to_string(targetPort);
+            std::shared_ptr<ProxyConnection> server = std::make_shared<TCPserver>(lPort.c_str());
+            std::shared_ptr<ProxyConnection> client = std::make_shared<TCPclient>(sHost.c_str(), sPort.c_str());
+            Connections.push_back(std::make_pair(server, client));
+        }
+        else {
+            //write error protocol
+        }
+    }
 }
