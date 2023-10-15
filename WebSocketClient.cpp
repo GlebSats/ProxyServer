@@ -5,7 +5,6 @@ WebSocketClient::WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort) :
 	sizeDataToSend(0),
 	trySend(NULL),
 	receivedData(0),
-	serverIP(serverIP),
 	serverPort(serverPort),
 	SendResponseStatus(FALSE),
 	ReceiveResponseStatus(FALSE),
@@ -19,6 +18,7 @@ WebSocketClient::WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort) :
 	errorCode(0),
 	errState(0)
 {
+	this->serverIP = std::wstring(serverIP);
 }
 
 WebSocketClient::~WebSocketClient()
@@ -51,7 +51,7 @@ void WebSocketClient::Connection()
 		throw ServException("Client: Create Event Error: ", GetLastError());
 	}
 
-	ConnectionHandle = WinHttpConnect(SessionHandle, serverIP, serverPort, 0);
+	ConnectionHandle = WinHttpConnect(SessionHandle, serverIP.c_str(), serverPort, 0);
 	if (ConnectionHandle == NULL) {
 		throw ServException("Client: Initialization error: ", GetLastError());
 	}

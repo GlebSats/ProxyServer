@@ -4,6 +4,6 @@
 #include "ProxyConnection.h"
 #include <thread>
 
-void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopEvent);
+void proxyServer(std::unique_ptr<ProxyConnection> server, std::unique_ptr<ProxyConnection> client, HANDLE* stopEvent);
 
 #endif

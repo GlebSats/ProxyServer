@@ -35,12 +35,11 @@ private:
 	HINTERNET ConnectionHandle;
 	HINTERNET RequestHandle;
 	HINTERNET WebSocketHandle;
-	LPCWSTR serverIP;
+	std::wstring serverIP;
 	INTERNET_PORT serverPort;
 	int errState;
 	int errorCode;
 	int sentBytes;
 	std::thread TS;
-
 };
 #endif

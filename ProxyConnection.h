@@ -15,7 +15,7 @@
 #define BUFFER_SIZE 1024
 
 class ProxyConnection {
-	friend void proxyServer(ProxyConnection& server, ProxyConnection& client, HANDLE* stopEvent);
+	friend void proxyServer(std::shared_ptr<ProxyConnection> server, std::shared_ptr<ProxyConnection> client, HANDLE* stopEvent);
 
 public:
 	ProxyConnection();

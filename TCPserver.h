@@ -27,7 +27,8 @@ private:
 private:
 	HANDLE bufferEmpty;
 	WSADATA wsData;
-	const char* listeningPort;
+	//const char* listeningPort;
+	std::string listeningPort;
 	addrinfo* lisSockInfo;
 	SOCKET lis_socket;
 	SOCKET client_socket;

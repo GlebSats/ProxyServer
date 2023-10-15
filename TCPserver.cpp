@@ -2,7 +2,6 @@
 
 TCPserver::TCPserver(const char* listeningPort) :
 	bufferEmpty(NULL),
-	listeningPort(listeningPort),
 	lisSockInfo(nullptr),
 	lis_socket(INVALID_SOCKET),
 	client_socket(INVALID_SOCKET),
@@ -10,6 +9,7 @@ TCPserver::TCPserver(const char* listeningPort) :
 	clientEvent(WSA_INVALID_EVENT),
 	errState(0)
 {
+	this->listeningPort = std::string(listeningPort);
 }
 
 TCPserver::~TCPserver()
@@ -31,7 +31,7 @@ TCPserver::~TCPserver()
 void TCPserver::Initialization()
 {
 	initSockets();
-	createSockInfo("127.0.0.1", listeningPort, &lisSockInfo);
+	createSockInfo("127.0.0.1", listeningPort.c_str(), &lisSockInfo);
 	createNewSocket(lis_socket, lisSockInfo);
 	bindSocket();
 	listenState();

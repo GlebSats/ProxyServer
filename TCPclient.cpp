@@ -2,13 +2,13 @@
 
 TCPclient::TCPclient(const char* serverIP, const char* serverPort) :
 	bufferEmpty(NULL),
-	serverIP(serverIP),
-	serverPort(serverPort),
 	serverSockInfo(nullptr),
 	server_socket(INVALID_SOCKET),
 	serverEvent(WSA_INVALID_EVENT),
 	errState(0)
 {
+	this->serverIP = std::string(serverIP);
+	this->serverPort = std::string(serverPort);
 }
 
 TCPclient::~TCPclient()
@@ -24,7 +24,7 @@ TCPclient::~TCPclient()
 
 void TCPclient::Connection()
 {
-	createSockInfo(serverIP, serverPort, &serverSockInfo);
+	createSockInfo(serverIP.c_str(), serverPort.c_str(), &serverSockInfo);
 	createNewSocket(server_socket, serverSockInfo);
 
 	errState = connect(server_socket, serverSockInfo->ai_addr, serverSockInfo->ai_addrlen);

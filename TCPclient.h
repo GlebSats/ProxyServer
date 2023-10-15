@@ -23,8 +23,8 @@ private:
 	void operator=(const TCPclient&) = delete; // Assignment not allowed
 private:
 	HANDLE bufferEmpty;
-	const char* serverIP;
-	const char* serverPort;
+	std::string serverIP;
+	std::string serverPort;
 	addrinfo* serverSockInfo;
 	SOCKET server_socket;
 	WSAEVENT serverEvent;
