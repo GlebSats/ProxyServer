@@ -282,11 +282,6 @@ void WebSocketClient::closeConnection()
 		WebSocketHandle = NULL;
 	}
 
-	if (RequestHandle != NULL) {
-		WinHttpCloseHandle(RequestHandle);
-		RequestHandle = NULL;
-	}
-
 	if (ConnectionHandle != NULL) {
 		WinHttpCloseHandle(ConnectionHandle);
 		ConnectionHandle = NULL;
