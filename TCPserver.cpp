@@ -57,12 +57,10 @@ void TCPserver::Connection()
 	HANDLE eventArr[2] = { *stopEvent, clientConnectionRequest };
 	int eventResult = WSAWaitForMultipleEvents(2, eventArr, FALSE, INFINITE, FALSE);
 	if (eventResult == WSA_WAIT_FAILED) {
-		WSACloseEvent(clientConnectionRequest);
 		throw ServException("Server: Error while waiting for events: ", WSAGetLastError());
 	}
 
 	if (eventResult == WSA_WAIT_EVENT_0) {
-		WSACloseEvent(clientConnectionRequest);
 		throw ServException("Service stopped by SCM: ");
 	}
 
