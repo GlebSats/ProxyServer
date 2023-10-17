@@ -69,39 +69,46 @@ void WebSocketClient::Connection()
 	std::thread WaitingForResponse([&]() {
 		WaitResponseFromServer();
 		});
-	WaitingForResponse.detach();
-
+	
 	HANDLE eventArr[2] = { *stopEvent, serverSendResponse };
 	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 30000);
 	if (eventResult == WAIT_FAILED) {
-		CloseHandle(serverSendResponse);
+		WinHttpCloseHandle(RequestHandle);
+		WaitingForResponse.join();
 		throw ServException("Client: Error while waiting for events: ", GetLastError());
 	}
 
 	if (eventResult == WAIT_TIMEOUT) {
-		CloseHandle(serverSendResponse);
+		WinHttpCloseHandle(RequestHandle);
+		WaitingForResponse.join();
 		throw ServException("Client: Response timeout expired: ");
 	}
 
 	if (eventResult == WAIT_OBJECT_0) {
-		CloseHandle(serverSendResponse);
+		WinHttpCloseHandle(RequestHandle);
+		WaitingForResponse.join();
 		throw ServException("Service stopped by SCM: ");
 	}
 
 	if (eventResult == WAIT_OBJECT_0 + 1) {
+		WaitingForResponse.join();
 		if (SendResponseStatus == FALSE) {
+			WinHttpCloseHandle(RequestHandle);
 			throw ServException("Client: Sending request to server error: ", GetLastError());
 		}
 
 		if (ReceiveResponseStatus == FALSE) {
+			WinHttpCloseHandle(RequestHandle);
 			throw ServException("Client: Request response error: ", GetLastError());
 		}
 
 		WebSocketHandle = WinHttpWebSocketCompleteUpgrade(RequestHandle, NULL);
 		if (WebSocketHandle == NULL) {
+			WinHttpCloseHandle(RequestHandle);
 			throw ServException("Client: Handshake completion error: ", GetLastError());
 		}
-
+		
+		WinHttpCloseHandle(RequestHandle);
 		writeLog("Client: Connection to Web Socket server successful");
 	}
 
