@@ -23,6 +23,7 @@ SERVICE_STATUS serviceStatus;
 SERVICE_STATUS_HANDLE serviceStatusHandle;
 HANDLE serviceStopEvent = NULL;
 std::vector <std::pair<std::shared_ptr<ProxyConnection>, std::shared_ptr<ProxyConnection>>> Connections;
+std::vector <std::wstring> Sections;
 // Windows Service Functions
 VOID WINAPI winServiceMain(DWORD Argc, LPTSTR* Argv);
 VOID WINAPI winServiceHandler(DWORD controlCode);
@@ -114,16 +115,25 @@ VOID ReportWinServiceStatus(DWORD dwCurrentState, DWORD dwWin32ExitCode, DWORD d
 }
 
 VOID InitWinService(DWORD Argc, LPTSTR* Argv) {
-    //здесь нужно грузить конфиг
+    std::vector <std::thread> threads;
+    readInitFile();
+
     serviceStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (serviceStopEvent == NULL) {
         ReportWinServiceStatus(SERVICE_STOPPED, GetLastError(), 0);
     }
     else {
         ReportWinServiceStatus(SERVICE_RUNNING, NO_ERROR, 0);
-        proxyServer(Connections[0].first, Connections[0].second, &serviceStopEvent);
+        for (auto& connection : Connections) {
+            threads.emplace_back([&]() {
+                proxyServer(connection.first, connection.second, &serviceStopEvent);
+            });
+        }
     }
 
+    for (auto& th : threads) {
+        th.join();
+    }
     ReportWinServiceStatus(SERVICE_STOPPED, NO_ERROR, 0);
 }
 
@@ -135,9 +145,7 @@ VOID SvcInstall() {
         printf("Cannot install service (%d)\n", GetLastError());
         return;
     }
-    //
-    readInitFile();
-    //
+    
     TCHAR szPath[MAX_PATH];
     StringCbPrintf(szPath, MAX_PATH, TEXT("\"%s\""), UnquotedPath);
 
@@ -196,7 +204,12 @@ VOID SvcUninstall() {
 
 VOID readInitFile() {
     WCHAR buffer[256];
-    std::vector <std::wstring> Sections;
+
+    if (!GetModuleFileName(NULL, UnquotedPath, MAX_PATH))
+    {
+        printf("Cannot start service (%d)\n", GetLastError());
+        return;
+    }
 
     std::wstring configPath = UnquotedPath;
     size_t i = configPath.find_last_of(L"\\");
