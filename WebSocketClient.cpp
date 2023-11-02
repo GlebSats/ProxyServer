@@ -1,11 +1,14 @@
 #include "WebSocketClient.h"
 
-WebSocketClient::WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort) :
+WebSocketClient::WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort, LPCWSTR subProtocol, bool secure) :
 	pDataToSend(NULL),
 	sizeDataToSend(0),
 	trySend(NULL),
 	receivedData(0),
 	serverPort(serverPort),
+	secure(secure),
+	subProtocol(subProtocol),
+	bSubProtocol(false),
 	SendResponseStatus(FALSE),
 	ReceiveResponseStatus(FALSE),
 	serverSendResponse(NULL),
@@ -19,6 +22,10 @@ WebSocketClient::WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort) :
 	errState(0)
 {
 	this->serverIP = std::wstring(serverIP);
+	if(subProtocol != nullptr){
+		bSubProtocol = true;
+		this->subProtocol = std::wstring(subProtocol);
+	}
 }
 
 WebSocketClient::~WebSocketClient()
@@ -26,6 +33,8 @@ WebSocketClient::~WebSocketClient()
 	if (SessionHandle != NULL) {
 		WinHttpCloseHandle(SessionHandle);
 	}
+
+	writeLog("WebSocketClient memory freed");
 }
 
 void WebSocketClient::Initialization()
@@ -38,14 +47,24 @@ void WebSocketClient::Initialization()
 
 void WebSocketClient::WaitResponseFromServer()
 {
-	LPCWSTR addHeader = L"Sec-WebSocket-Protocol: mqttv3.1\r\n";
-	SendResponseStatus = WinHttpSendRequest(RequestHandle, addHeader, -1L, NULL, 0, 0, WINHTTP_FLAG_SECURE);
+	if (bSubProtocol) {
+		subProtocol += L"\r\n";
+		SendResponseStatus = WinHttpSendRequest(RequestHandle, subProtocol.c_str(), -1L, NULL, 0, 0, 0);
+	}
+	else {
+		SendResponseStatus = WinHttpSendRequest(RequestHandle, WINHTTP_NO_ADDITIONAL_HEADERS, -1L, NULL, 0, 0, 0);
+	}
 	ReceiveResponseStatus = WinHttpReceiveResponse(RequestHandle, NULL);
 	SetEvent(serverSendResponse);
 }
 
 void WebSocketClient::Connection()
 {
+	DWORD flag = 0;
+	if (secure) {
+		flag = WINHTTP_FLAG_SECURE;
+	}
+
 	serverSendResponse = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (serverSendResponse == NULL) {
 		throw ServException("Client: Create Event Error: ", GetLastError());
@@ -56,7 +75,7 @@ void WebSocketClient::Connection()
 		throw ServException("Client: Initialization error: ", GetLastError());
 	}
 
-	RequestHandle = WinHttpOpenRequest(ConnectionHandle, L"GET", NULL, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+	RequestHandle = WinHttpOpenRequest(ConnectionHandle, L"GET", NULL, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flag);
 	if (RequestHandle == NULL) {
 		throw ServException("Client: HTTP request creation error: ", GetLastError());
 	}
@@ -69,7 +88,7 @@ void WebSocketClient::Connection()
 	std::thread WaitingForResponse([&]() {
 		WaitResponseFromServer();
 		});
-	
+
 	HANDLE eventArr[2] = { *stopEvent, serverSendResponse };
 	int eventResult = WaitForMultipleObjects(2, eventArr, FALSE, 30000);
 	if (eventResult == WAIT_FAILED) {
@@ -107,7 +126,7 @@ void WebSocketClient::Connection()
 			WinHttpCloseHandle(RequestHandle);
 			throw ServException("Client: Handshake completion error: ", GetLastError());
 		}
-		
+
 		WinHttpCloseHandle(RequestHandle);
 		writeLog("Client: Connection to Web Socket server successful");
 	}
