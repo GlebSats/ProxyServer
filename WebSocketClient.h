@@ -8,7 +8,7 @@
 
 class WebSocketClient : public ProxyConnection {
 public:
-	WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort);
+	WebSocketClient(LPCWSTR serverIP, INTERNET_PORT serverPort, LPCWSTR subProtocol, bool secure);
 	~WebSocketClient();
 	void Initialization() override;
 	void Connection() override;
@@ -36,7 +36,10 @@ private:
 	HINTERNET RequestHandle;
 	HINTERNET WebSocketHandle;
 	std::wstring serverIP;
+	std::wstring subProtocol;
 	INTERNET_PORT serverPort;
+	bool secure;
+	bool bSubProtocol;
 	int errState;
 	int errorCode;
 	int sentBytes;
