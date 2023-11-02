@@ -225,21 +225,21 @@ VOID readInitFile() {
         }
     }
     else {
-        //write error
-        std::cout << "read init error";
+        writeLog("Init file: section reading error ", GetLastError());
         return;
     }
 
-    std::vector <LPCWSTR> keyNames{ L"Listening port", L"Host", L"Protocol", L"Subprotocol", L"Port" };
+    std::vector <LPCWSTR> keyNames{ L"Listening port", L"Host", L"Protocol", L"Subprotocol", L"Secure", L"Port" };
     for (auto& section : Sections) {
+        bool bSubProtocol = true;
+        std::string stringSection(section.begin(), section.end());
         std::vector <std::wstring> connectionOptions;
         int targetPort = 0;
         for (auto& key : keyNames) {
             if (key == L"Port") {
                 targetPort = GetPrivateProfileIntW(section.c_str(), key, 0, configPath.c_str());
                 if (targetPort == 0) {
-                    //write error
-                    std::cout << "read init error";
+                    writeLog(stringSection + ": target port reading error ", GetLastError());
                     return;
                 }
             }
@@ -250,18 +250,37 @@ VOID readInitFile() {
                 }
                 else {
                     if (key != L"Subprotocol") {
-                        //write error
-                        std::cout << "read init error";
-                        return;
+                        if (key == L"Secure") {
+                            connectionOptions.push_back(L"false");
+                        }
+                        else {
+                            std::wstring wk = key;
+                            std::string sk(wk.begin(), wk.end());
+                            writeLog(stringSection + ": " + sk + " reading error ", GetLastError());
+                            return;
+                        }
+                    }
+                    else {
+                        bSubProtocol = false;
                     }
                 }
             }
         }
         if (connectionOptions[2] == L"websocket") {
+            bool secure = false;
+            if (connectionOptions[4] == L"true") {
+                secure = true;
+            }
             std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
             std::shared_ptr<ProxyConnection> server = std::make_shared<TCPserver>(lPort.c_str());
-            std::shared_ptr<ProxyConnection> client = std::make_shared<WebSocketClient>(connectionOptions[1].c_str(), targetPort);
-            Connections.push_back(std::make_pair(server, client));
+            if (bSubProtocol) {
+                std::shared_ptr<ProxyConnection> client = std::make_shared<WebSocketClient>(connectionOptions[1].c_str(), targetPort, connectionOptions[3].c_str(), secure);
+                Connections.push_back(std::make_pair(server, client));
+            }
+            else {
+                std::shared_ptr<ProxyConnection> client = std::make_shared<WebSocketClient>(connectionOptions[1].c_str(), targetPort, nullptr, secure);
+                Connections.push_back(std::make_pair(server, client));
+            }
         }
         else if (connectionOptions[2] == L"TCP") {
             std::string lPort(connectionOptions[0].begin(), connectionOptions[0].end());
@@ -272,7 +291,7 @@ VOID readInitFile() {
             Connections.push_back(std::make_pair(server, client));
         }
         else {
-            //write error protocol
+            writeLog(stringSection + ": incorrect protocol");
         }
     }
 }
